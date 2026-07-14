@@ -96,151 +96,227 @@ pub fn generate(
 
     let stamp = timestamp();
     let total_work = target_ticks * request.batch_size as i64;
-    let mut completed_before = 0i64;
-    let mut tracks = Vec::with_capacity(request.batch_size);
 
+    // Create all result tracks. From-scratch prompts are identical, so the
+    // tracks batch together and advance in lockstep through the section loop.
+    let mut tracks: Vec<TrackGen> = Vec::with_capacity(request.batch_size);
     for index in 0..request.batch_size {
         let path = cache_dir.join(format!("track_{stamp}_{}.tokens", index + 1));
         let mut store = TokenStore::create(&path, None)?;
         store.extend(&prompt_rows)?;
         let initial_end_tick = store.end_tick();
-        let target_tick = initial_end_tick + target_ticks;
-
-        generate_track(
-            model,
-            &mut store,
-            target_tick,
+        tracks.push(TrackGen {
+            store,
             initial_end_tick,
-            section_size as usize,
-            prompt_size as usize,
+            target_tick: initial_end_tick + target_ticks,
             max_events,
-            &flags,
-            &params,
-            &mut rng,
-            cancel,
-            &mut |gained| progress(completed_before + gained, total_work),
-        )?;
+            generated: 0,
+            done: false,
+        });
+    }
 
-        completed_before += (store.end_tick() - initial_end_tick).min(target_ticks);
-        let token_path = store.finish()?;
-        tracks.push(GeneratedTrack {
+    run_batches(
+        model,
+        &mut tracks,
+        section_size as usize,
+        prompt_size as usize,
+        &flags,
+        &params,
+        &mut rng,
+        cancel,
+        total_work,
+        target_ticks,
+        &mut progress,
+    )?;
+
+    let mut outputs = Vec::with_capacity(tracks.len());
+    for track in tracks {
+        let target_tick = track.target_tick;
+        let token_path = track.store.finish()?;
+        outputs.push(GeneratedTrack {
             token_path,
             target_tick,
         });
-
-        if cancel.load(Ordering::Relaxed) {
-            break;
-        }
     }
-
-    Ok(GenerationOutput { tracks, seed })
+    Ok(GenerationOutput {
+        tracks: outputs,
+        seed,
+    })
 }
 
-#[allow(clippy::too_many_arguments)]
-fn generate_track(
-    model: &MidiModel,
-    store: &mut TokenStore,
-    target_tick: i64,
+struct TrackGen {
+    store: TokenStore,
     initial_end_tick: i64,
+    target_tick: i64,
+    max_events: usize,
+    generated: usize,
+    done: bool,
+}
+
+impl TrackGen {
+    fn has_work(&self) -> bool {
+        !self.done && self.store.end_tick() < self.target_tick && self.generated < self.max_events
+    }
+
+    fn completed(&self, target_ticks: i64) -> i64 {
+        (self.store.end_tick() - self.initial_end_tick).clamp(0, target_ticks)
+    }
+}
+
+/// Generate all tracks in lockstep batches: each outer step runs one base-net
+/// forward over the whole batch, then decodes one event per track. Tracks that
+/// reach their target or emit eos drop out of the batch.
+#[allow(clippy::too_many_arguments)]
+fn run_batches(
+    model: &MidiModel,
+    tracks: &mut [TrackGen],
     section_size: usize,
     prompt_size: usize,
-    max_events: usize,
     flags: &DecodeFlags,
     params: &DecodeParams,
     rng: &mut ChaCha8Rng,
     cancel: &AtomicBool,
-    on_progress: &mut dyn FnMut(i64),
+    total_work: i64,
+    target_ticks: i64,
+    progress: &mut impl FnMut(i64, i64),
 ) -> Result<()> {
     let device = model.device().clone();
-    let mut generated = 0usize;
-    let target_ticks = target_tick - initial_end_tick;
 
     while !cancel.load(Ordering::Relaxed) {
-        if store.end_tick() >= target_tick || generated >= max_events {
+        let active: Vec<usize> = (0..tracks.len()).filter(|&i| tracks[i].has_work()).collect();
+        if active.is_empty() {
             break;
         }
-        let mut input_rows = store.model_prompt(prompt_size)?;
-        let mut base_cache = model.base_cache();
-        let events_in_section = section_size.min(max_events - generated);
-        let mut produced = 0usize;
-        let mut ended = false;
+        // Batch only tracks that share a prompt length (normally all active ones,
+        // since the batch advances in lockstep); the rest wait for the next pass.
+        let mut prompts: Vec<(usize, Vec<TokenRow>)> = Vec::with_capacity(active.len());
+        for &index in &active {
+            prompts.push((index, tracks[index].store.model_prompt(prompt_size)?));
+        }
+        let target_len = prompts[0].1.len();
+        let batch: Vec<(usize, Vec<TokenRow>)> = prompts
+            .into_iter()
+            .filter(|(_, prompt)| prompt.len() == target_len)
+            .collect();
+        let batch_idx: Vec<usize> = batch.iter().map(|(index, _)| *index).collect();
+        let prompt_rows: Vec<Vec<TokenRow>> = batch.into_iter().map(|(_, prompt)| prompt).collect();
 
-        while produced < events_in_section {
-            if cancel.load(Ordering::Relaxed)
-                || store.end_tick() >= target_tick
-                || generated >= max_events
-            {
+        let events_in_section = batch_idx
+            .iter()
+            .map(|&index| tracks[index].max_events - tracks[index].generated)
+            .min()
+            .unwrap_or(0)
+            .min(section_size);
+
+        let mut input = stack_rows(&prompt_rows, &device)?;
+        let mut base_cache = model.base_cache();
+
+        for _ in 0..events_in_section {
+            if cancel.load(Ordering::Relaxed) {
                 break;
             }
-            let ids = rows_to_tensor(&input_rows, &device)?;
-            let hidden = model.base_forward(&ids, &mut base_cache)?;
-            match sample_event(model, &hidden, flags, params, rng)? {
-                None => {
-                    ended = true;
-                    break;
-                }
-                Some(row) => {
-                    store.append(&row)?;
-                    generated += 1;
-                    produced += 1;
-                    input_rows = vec![row];
-                    on_progress((store.end_tick() - initial_end_tick).min(target_ticks));
+            let hidden = model.base_forward(&input, &mut base_cache)?;
+            let rows = sample_event_batch(model, &hidden, flags, params, rng, batch_idx.len())?;
+            for (position, &index) in batch_idx.iter().enumerate() {
+                let row = rows[position];
+                if row[0] == EOS_ID as i16 {
+                    tracks[index].done = true;
+                } else if tracks[index].has_work() {
+                    tracks[index].store.append(&row)?;
+                    tracks[index].generated += 1;
                 }
             }
-        }
-
-        if ended || produced == 0 {
-            break;
+            let completed: i64 = tracks.iter().map(|track| track.completed(target_ticks)).sum();
+            progress(completed, total_work);
+            if !batch_idx.iter().any(|&index| tracks[index].has_work()) {
+                break;
+            }
+            input = next_rows(&rows, &device)?;
         }
     }
     Ok(())
 }
 
-fn sample_event(
+/// Decode one event per batch item, applying per-item constrained sampling.
+fn sample_event_batch(
     model: &MidiModel,
     hidden: &Tensor,
     flags: &DecodeFlags,
     params: &DecodeParams,
     rng: &mut ChaCha8Rng,
-) -> Result<Option<TokenRow>> {
+    batch: usize,
+) -> Result<Vec<TokenRow>> {
     let device = model.device().clone();
     let mut token_cache = model.token_cache();
-    let mut row = [PAD_ID as i16; MAX_TOKEN_SEQ];
-    let mut kind: Option<EventType> = None;
-    let mut last_id: u32 = 0;
+    let mut rows = vec![[PAD_ID as i16; MAX_TOKEN_SEQ]; batch];
+    let mut kinds: Vec<Option<EventType>> = vec![None; batch];
+    let mut ended = vec![false; batch];
+    let mut last_ids = vec![0u32; batch];
 
     for slot in 0..MAX_TOKEN_SEQ {
-        let allowed = if slot == 0 {
-            allowed_event_ids(flags)
-        } else {
-            allowed_param_ids(kind.expect("event kind set at slot 0"), slot, flags)
-        };
         let logits = if slot == 0 {
             model.token_logits_from_hidden(hidden, &mut token_cache)?
         } else {
-            let prev = Tensor::from_vec(vec![last_id], (1, 1), &device)?;
+            let prev = Tensor::from_vec(last_ids.clone(), (batch, 1), &device)?;
             model.token_logits_from_id(&prev, &mut token_cache)?
         };
-        let logits = logits.flatten_all()?.to_vec1::<f32>()?;
-        let mut probs = softmax_with_temp(&logits, params.temperature);
-        apply_mask(&mut probs, &allowed);
-        let sample = sample_top_p_k(&probs, params.top_p, params.top_k, rng);
-        last_id = sample;
-
-        if slot == 0 {
-            if sample == EOS_ID {
-                return Ok(None);
+        let rows_logits = logits.to_vec2::<f32>()?;
+        for item in 0..batch {
+            if ended[item] {
+                last_ids[item] = PAD_ID;
+                continue;
             }
-            kind = event_type_from_id(sample);
-            row[0] = sample as i16;
-        } else {
-            row[slot] = sample as i16;
-            if slot == kind.expect("event kind set").fields().len() {
-                break;
+            let allowed = if slot == 0 {
+                allowed_event_ids(flags)
+            } else {
+                allowed_param_ids(kinds[item].expect("event kind set at slot 0"), slot, flags)
+            };
+            let mut probs = softmax_with_temp(&rows_logits[item], params.temperature);
+            apply_mask(&mut probs, &allowed);
+            let sample = sample_top_p_k(&probs, params.top_p, params.top_k, rng);
+            last_ids[item] = sample;
+            if slot == 0 {
+                if sample == EOS_ID {
+                    ended[item] = true;
+                    rows[item][0] = EOS_ID as i16;
+                } else {
+                    kinds[item] = event_type_from_id(sample);
+                    rows[item][0] = sample as i16;
+                }
+            } else {
+                rows[item][slot] = sample as i16;
             }
         }
+        if slot > 0
+            && (0..batch).all(|item| {
+                ended[item] || kinds[item].map_or(true, |kind| slot >= kind.fields().len())
+            })
+        {
+            break;
+        }
     }
-    Ok(Some(row))
+    Ok(rows)
+}
+
+fn stack_rows(prompts: &[Vec<TokenRow>], device: &Device) -> Result<Tensor> {
+    let batch = prompts.len();
+    let length = prompts[0].len();
+    let mut flat = Vec::with_capacity(batch * length * MAX_TOKEN_SEQ);
+    for prompt in prompts {
+        for row in prompt {
+            flat.extend(row.iter().map(|&value| value as u32));
+        }
+    }
+    Ok(Tensor::from_vec(flat, (batch, length, MAX_TOKEN_SEQ), device)?)
+}
+
+fn next_rows(rows: &[TokenRow], device: &Device) -> Result<Tensor> {
+    let batch = rows.len();
+    let mut flat = Vec::with_capacity(batch * MAX_TOKEN_SEQ);
+    for row in rows {
+        flat.extend(row.iter().map(|&value| value as u32));
+    }
+    Ok(Tensor::from_vec(flat, (batch, 1, MAX_TOKEN_SEQ), device)?)
 }
 
 /// Build the from-scratch prompt: bos, time/key signature, tempo, patch changes.
@@ -305,14 +381,6 @@ fn resolve_context_window(requested: u32) -> u32 {
     } else {
         512
     }
-}
-
-fn rows_to_tensor(rows: &[TokenRow], device: &Device) -> Result<Tensor> {
-    let flat: Vec<u32> = rows
-        .iter()
-        .flat_map(|row| row.iter().map(|&v| v as u32))
-        .collect();
-    Ok(Tensor::from_vec(flat, (1, rows.len(), MAX_TOKEN_SEQ), device)?)
 }
 
 fn timestamp() -> u128 {
