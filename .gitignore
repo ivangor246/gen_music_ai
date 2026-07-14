@@ -1,0 +1,14 @@
+# Rust build artifacts
+/target
+
+# Large model weights and soundfont (kept on disk for the dev build, but too big
+# for git — supply them separately or let a release be built with --features embed)
+/models/
+/assets/soundfont.sf2
+
+# Backup files
+**/*.rs.bk
+
+# Editor / OS
+/.vscode
+.DS_Store

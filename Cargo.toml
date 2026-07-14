@@ -1,0 +1,38 @@
+[package]
+name = "midi-model"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+# `embed` bakes the 447MB model and 49MB soundfont into the binary via include_bytes!.
+# Off by default so dev builds stay fast (assets are read from the repo at runtime);
+# release builds enable it for a single self-contained binary.
+default = []
+embed = []
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+thiserror = "2"
+candle-core = "0.9"
+candle-nn = "0.9"
+half = "2"
+safetensors = "0.4"
+rand = "0.8"
+rand_chacha = "0.3"
+hound = "3.5.1"
+cpal = "0.18.1"
+# sf3: the bundled soundfont uses Ogg/Vorbis-compressed samples (SF3).
+# i16-out: render directly to interleaved i16.
+oxisynth = { version = "0.1.0", features = ["sf3", "i16-out"] }
+iced = { version = "0.13", features = ["canvas", "tokio"] }
+directories = "6.0.0"
+rfd = "0.17.2"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+opt-level = 3
+panic = "abort"
+strip = "symbols"
