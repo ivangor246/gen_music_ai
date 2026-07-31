@@ -47,12 +47,13 @@ fn view_to_f32(view: &TensorView, device: &Device) -> Result<Tensor> {
     Ok(Tensor::from_vec(values, shape, device)?)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "heavy-tests"))]
 mod tests {
     use super::*;
 
     #[test]
     fn loads_expected_tensors() {
+        let _guard = super::super::HEAVY_TEST_LOCK.lock().unwrap();
         let device = Device::Cpu;
         let tensors = load_tensors(&device).unwrap();
 

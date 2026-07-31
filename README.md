@@ -76,9 +76,25 @@ advancing musical time.
 
 ## Tests
 
+The default test suite does not load the model weights or soundfont:
+
 ```bash
 cargo test
 ```
 
-The test suite covers numerical parity of the model's forward pass, byte-for-byte MIDI export,
-timeline and note-density correctness, and end-to-end generation.
+Run model parity, end-to-end generation, and WAV export explicitly when the required assets and
+enough memory are available:
+
+```bash
+cargo test --features heavy-tests -- --test-threads=1
+```
+
+The generation benchmark is ignored by default and can be started separately:
+
+```bash
+cargo test --release --features heavy-tests --test bench_gen -- --ignored --nocapture
+```
+
+Together, the light and heavy suites cover numerical parity of the model's forward pass,
+byte-for-byte MIDI export, timeline and note-density correctness, WAV rendering, and end-to-end
+generation.

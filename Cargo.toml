@@ -9,6 +9,28 @@ edition = "2024"
 # release builds enable it for a single self-contained binary.
 default = []
 embed = []
+# Enables tests that load the model weights or soundfont at runtime.
+heavy-tests = []
+
+[[test]]
+name = "generation"
+path = "tests/generation.rs"
+required-features = ["heavy-tests"]
+
+[[test]]
+name = "parity"
+path = "tests/parity.rs"
+required-features = ["heavy-tests"]
+
+[[test]]
+name = "wav_export"
+path = "tests/wav_export.rs"
+required-features = ["heavy-tests"]
+
+[[test]]
+name = "bench_gen"
+path = "tests/bench_gen.rs"
+required-features = ["heavy-tests"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

@@ -86,13 +86,14 @@ impl MidiModel {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "heavy-tests"))]
 mod tests {
     use super::*;
     use crate::assets;
 
     #[test]
     fn forward_produces_expected_shapes() {
+        let _guard = super::super::HEAVY_TEST_LOCK.lock().unwrap();
         let config = ModelConfig::from_json(assets::CONFIG_JSON).unwrap();
         let device = Device::Cpu;
         let model = MidiModel::load(config, device.clone()).unwrap();
