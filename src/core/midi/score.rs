@@ -13,13 +13,33 @@ pub const TICKS_PER_QUARTER: i64 = 480;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
-    NoteOn { channel: u8, pitch: u8, velocity: u8 },
-    NoteOff { channel: u8, pitch: u8 },
-    PatchChange { channel: u8, patch: u8 },
-    ControlChange { channel: u8, controller: u8, value: u8 },
+    NoteOn {
+        channel: u8,
+        pitch: u8,
+        velocity: u8,
+    },
+    NoteOff {
+        channel: u8,
+        pitch: u8,
+    },
+    PatchChange {
+        channel: u8,
+        patch: u8,
+    },
+    ControlChange {
+        channel: u8,
+        controller: u8,
+        value: u8,
+    },
     SetTempo(u32),
-    TimeSignature { numerator: u8, denominator_power: u8 },
-    KeySignature { sharps_flats: i8, minor: u8 },
+    TimeSignature {
+        numerator: u8,
+        denominator_power: u8,
+    },
+    KeySignature {
+        sharps_flats: i8,
+        minor: u8,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -145,26 +165,38 @@ impl<I: Iterator<Item = TokenRow>> ActionStream<I> {
                     pitch,
                 }));
             }
-            EventType::PatchChange => self.push(track, Action::PatchChange {
-                channel: event.params[3] as u8,
-                patch: event.params[4] as u8,
-            }),
-            EventType::ControlChange => self.push(track, Action::ControlChange {
-                channel: event.params[3] as u8,
-                controller: event.params[4] as u8,
-                value: event.params[5] as u8,
-            }),
+            EventType::PatchChange => self.push(
+                track,
+                Action::PatchChange {
+                    channel: event.params[3] as u8,
+                    patch: event.params[4] as u8,
+                },
+            ),
+            EventType::ControlChange => self.push(
+                track,
+                Action::ControlChange {
+                    channel: event.params[3] as u8,
+                    controller: event.params[4] as u8,
+                    value: event.params[5] as u8,
+                },
+            ),
             EventType::SetTempo => {
                 self.push(track, Action::SetTempo(bpm_to_tempo(event.params[3])))
             }
-            EventType::TimeSignature => self.push(track, Action::TimeSignature {
-                numerator: (event.params[3] + 1) as u8,
-                denominator_power: (event.params[4] + 1) as u8,
-            }),
-            EventType::KeySignature => self.push(track, Action::KeySignature {
-                sharps_flats: event.params[3] as i8 - 7,
-                minor: event.params[4] as u8,
-            }),
+            EventType::TimeSignature => self.push(
+                track,
+                Action::TimeSignature {
+                    numerator: (event.params[3] + 1) as u8,
+                    denominator_power: (event.params[4] + 1) as u8,
+                },
+            ),
+            EventType::KeySignature => self.push(
+                track,
+                Action::KeySignature {
+                    sharps_flats: event.params[3] as i8 - 7,
+                    minor: event.params[4] as u8,
+                },
+            ),
         }
     }
 
@@ -209,7 +241,8 @@ impl<I: Iterator<Item = TokenRow>> Iterator for ActionStream<I> {
                     if let Some(event) = tokens_to_event(&row) {
                         self.coarse_time += i64::from(event.params[0]);
                         let tick = self.last_tick.max(
-                            (self.coarse_time * 16 + i64::from(event.params[1])) * TICKS_PER_QUARTER
+                            (self.coarse_time * 16 + i64::from(event.params[1]))
+                                * TICKS_PER_QUARTER
                                 / 16,
                         );
                         self.flush_due(tick);

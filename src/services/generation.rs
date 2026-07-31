@@ -18,8 +18,8 @@ use crate::core::sampler::{apply_mask, sample_top_p_k, softmax_with_temp};
 use crate::core::tokenizer::codec::{Event, TokenRow, bos_row, event_to_tokens};
 use crate::core::tokenizer::events::EventType;
 use crate::core::tokenizer::vocab::{BOS_ID, EOS_ID, MAX_TOKEN_SEQ, PAD_ID, event_type_from_id};
-use crate::settings::{AUTO_VALUE, GenerationRequest, GenerationSettings};
 use crate::services::token_store::TokenStore;
+use crate::settings::{AUTO_VALUE, GenerationRequest, GenerationSettings};
 
 /// Key signatures in tokenizer order (index -> sf/mi via idx/2, idx%2).
 pub const KEY_SIGNATURES: [&str; 30] = [
@@ -183,7 +183,9 @@ fn run_batches(
     let device = model.device().clone();
 
     while !cancel.load(Ordering::Relaxed) {
-        let active: Vec<usize> = (0..tracks.len()).filter(|&i| tracks[i].has_work()).collect();
+        let active: Vec<usize> = (0..tracks.len())
+            .filter(|&i| tracks[i].has_work())
+            .collect();
         if active.is_empty() {
             break;
         }
@@ -226,7 +228,10 @@ fn run_batches(
                     tracks[index].generated += 1;
                 }
             }
-            let completed: i64 = tracks.iter().map(|track| track.completed(target_ticks)).sum();
+            let completed: i64 = tracks
+                .iter()
+                .map(|track| track.completed(target_ticks))
+                .sum();
             progress(completed, total_work);
             if !batch_idx.iter().any(|&index| tracks[index].has_work()) {
                 break;
@@ -307,7 +312,11 @@ fn stack_rows(prompts: &[Vec<TokenRow>], device: &Device) -> Result<Tensor> {
             flat.extend(row.iter().map(|&value| value as u32));
         }
     }
-    Ok(Tensor::from_vec(flat, (batch, length, MAX_TOKEN_SEQ), device)?)
+    Ok(Tensor::from_vec(
+        flat,
+        (batch, length, MAX_TOKEN_SEQ),
+        device,
+    )?)
 }
 
 fn next_rows(rows: &[TokenRow], device: &Device) -> Result<Tensor> {
@@ -334,7 +343,10 @@ fn build_initial_prompt(settings: &GenerationSettings) -> (Vec<TokenRow>, Vec<u1
         vec![0, 0, 0, (numerator - 1) as u16, denominator_code - 1],
     ));
     if settings.key_signature != AUTO_VALUE {
-        if let Some(index) = KEY_SIGNATURES.iter().position(|&k| k == settings.key_signature) {
+        if let Some(index) = KEY_SIGNATURES
+            .iter()
+            .position(|&k| k == settings.key_signature)
+        {
             events.push(Event::new(
                 EventType::KeySignature,
                 vec![0, 0, 0, (index / 2) as u16, (index % 2) as u16],

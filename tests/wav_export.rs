@@ -39,7 +39,13 @@ fn wav_has_correct_format_and_length() {
     file.flush().unwrap();
 
     let soundfont = assets::soundfont();
-    save_wav(&token_path, &wav_path, soundfont.as_ref(), Some(TARGET_TICK)).unwrap();
+    save_wav(
+        &token_path,
+        &wav_path,
+        soundfont.as_ref(),
+        Some(TARGET_TICK),
+    )
+    .unwrap();
 
     let reader = hound::WavReader::open(&wav_path).unwrap();
     let spec = reader.spec();

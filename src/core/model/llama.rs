@@ -5,7 +5,7 @@
 use candle_core::{Device, Result, Tensor};
 use candle_nn::{Embedding, Linear, Module, RmsNorm, VarBuilder};
 
-use super::config::{LlamaConfig, ROPE_THETA, RMS_NORM_EPS};
+use super::config::{LlamaConfig, RMS_NORM_EPS, ROPE_THETA};
 use super::kv_cache::{LayerKvCache, StackCache};
 use super::rope::RotaryCache;
 

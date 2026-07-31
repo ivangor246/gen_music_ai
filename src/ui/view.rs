@@ -58,7 +58,12 @@ fn model_panel(state: &State) -> Element<'_, Message> {
 }
 
 fn presets_panel(state: &State) -> Element<'_, Message> {
-    let names: Vec<String> = state.preset_store.all().into_iter().map(|p| p.name).collect();
+    let names: Vec<String> = state
+        .preset_store
+        .all()
+        .into_iter()
+        .map(|p| p.name)
+        .collect();
     let picker = pick_list(names, state.selected_preset.clone(), Message::SelectPreset)
         .placeholder("Select a preset");
     let name_input = text_input("Preset name", &state.new_preset_name)
@@ -80,25 +85,39 @@ fn presets_panel(state: &State) -> Element<'_, Message> {
 fn tabs_panel(state: &State) -> Element<'_, Message> {
     let tab_button = |label: &'static str, tab: Tab, active: bool| {
         let b = button(text(label)).on_press(Message::SelectTab(tab));
-        if active { b } else { b.style(button::secondary) }
+        if active {
+            b
+        } else {
+            b.style(button::secondary)
+        }
     };
     let bar = row![
-        tab_button("New Composition", Tab::NewComposition, matches!(state.tab, Tab::NewComposition)),
-        tab_button("Continue MIDI File", Tab::ContinueMidi, matches!(state.tab, Tab::ContinueMidi)),
-        tab_button("Continue Result", Tab::ContinueResult, matches!(state.tab, Tab::ContinueResult)),
+        tab_button(
+            "New Composition",
+            Tab::NewComposition,
+            matches!(state.tab, Tab::NewComposition)
+        ),
+        tab_button(
+            "Continue MIDI File",
+            Tab::ContinueMidi,
+            matches!(state.tab, Tab::ContinueMidi)
+        ),
+        tab_button(
+            "Continue Result",
+            Tab::ContinueResult,
+            matches!(state.tab, Tab::ContinueResult)
+        ),
     ]
     .spacing(6);
 
     let body: Element<Message> = match state.tab {
         Tab::NewComposition => composition_tab(state),
-        Tab::ContinueMidi => text(
-            "MIDI file continuation will be available in a future version.",
-        )
-        .into(),
-        Tab::ContinueResult => text(
-            "Result continuation will be available in a future version.",
-        )
-        .into(),
+        Tab::ContinueMidi => {
+            text("MIDI file continuation will be available in a future version.").into()
+        }
+        Tab::ContinueResult => {
+            text("Result continuation will be available in a future version.").into()
+        }
     };
 
     section("Input", column![bar, body].spacing(8).into())
@@ -127,14 +146,21 @@ fn composition_tab(state: &State) -> Element<'_, Message> {
         combo("Drum Kit", DRUM_KITS.to_vec(), &state.drum_kit, |v| {
             Message::Form(FormMsg::DrumKit(v))
         }),
-        number("Tempo (BPM)", &state.bpm, |v| Message::Form(FormMsg::Bpm(v))),
-        combo("Time Signature", TIME_SIGNATURES.to_vec(), &state.time_signature, |v| {
-            Message::Form(FormMsg::TimeSignature(v))
-        }),
+        number("Tempo (BPM)", &state.bpm, |v| Message::Form(FormMsg::Bpm(
+            v
+        ))),
+        combo(
+            "Time Signature",
+            TIME_SIGNATURES.to_vec(),
+            &state.time_signature,
+            |v| { Message::Form(FormMsg::TimeSignature(v)) }
+        ),
         combo_owned("Key Signature", key_options, &state.key_signature, |v| {
             Message::Form(FormMsg::KeySignature(v))
         }),
-        number("Length (bars)", &state.bars, |v| Message::Form(FormMsg::Bars(v))),
+        number("Length (bars)", &state.bars, |v| Message::Form(
+            FormMsg::Bars(v)
+        )),
         number("Event Budget per Bar", &state.events_per_bar, |v| {
             Message::Form(FormMsg::EventsPerBar(v))
         }),
@@ -150,9 +176,11 @@ fn params_panel(state: &State) -> Element<'_, Message> {
     let sliders = row![
         labeled(
             "Temperature",
-            slider(0.1..=1.2, state.temperature, |v| Message::Form(FormMsg::Temperature(v)))
-                .step(0.01)
-                .width(Length::Fixed(160.0)),
+            slider(0.1..=1.2, state.temperature, |v| Message::Form(
+                FormMsg::Temperature(v)
+            ))
+            .step(0.01)
+            .width(Length::Fixed(160.0)),
         ),
         labeled(
             "Probability Threshold",
@@ -160,8 +188,12 @@ fn params_panel(state: &State) -> Element<'_, Message> {
                 .step(0.01)
                 .width(Length::Fixed(160.0)),
         ),
-        number("Top-k Candidates", &state.top_k, |v| Message::Form(FormMsg::TopK(v))),
-        number("Result Count", &state.batch, |v| Message::Form(FormMsg::Batch(v))),
+        number("Top-k Candidates", &state.top_k, |v| Message::Form(
+            FormMsg::TopK(v)
+        )),
+        number("Result Count", &state.batch, |v| Message::Form(
+            FormMsg::Batch(v)
+        )),
         number("Seed", &state.seed, |v| Message::Form(FormMsg::Seed(v))),
     ]
     .spacing(12);
@@ -263,7 +295,11 @@ fn player_panel(state: &State) -> Element<'_, Message> {
     let seek = slider(0.0..=1.0, fraction, Message::Seek).step(0.001);
 
     let play_label = if state.playing { "Pause" } else { "Play" };
-    let play_message = if state.playing { Message::Pause } else { Message::Play };
+    let play_message = if state.playing {
+        Message::Pause
+    } else {
+        Message::Play
+    };
     let has_timeline = state.timeline.is_some();
 
     let controls = row![
@@ -286,7 +322,9 @@ fn player_panel(state: &State) -> Element<'_, Message> {
 // --- helpers ---
 
 fn labeled<'a>(label: &'a str, widget: impl Into<Element<'a, Message>>) -> Element<'a, Message> {
-    column![text(label).size(13), widget.into()].spacing(2).into()
+    column![text(label).size(13), widget.into()]
+        .spacing(2)
+        .into()
 }
 
 fn number<'a>(

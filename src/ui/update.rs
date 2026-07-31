@@ -273,7 +273,10 @@ fn clear_cache(state: &mut State) {
     if let Ok(entries) = std::fs::read_dir(&dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if matches!(path.extension().and_then(|e| e.to_str()), Some("tokens" | "json")) {
+            if matches!(
+                path.extension().and_then(|e| e.to_str()),
+                Some("tokens" | "json")
+            ) {
                 std::fs::remove_file(path).ok();
             }
         }

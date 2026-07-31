@@ -66,7 +66,11 @@ fn candle_forward_matches_torch_f32() {
     let hidden_rs = to_vec(&hidden);
 
     let mut token_cache = model.token_cache();
-    let logits0 = to_vec(&model.token_logits_from_hidden(&hidden, &mut token_cache).unwrap());
+    let logits0 = to_vec(
+        &model
+            .token_logits_from_hidden(&hidden, &mut token_cache)
+            .unwrap(),
+    );
 
     // Feed the reference greedy id so step 1 stays aligned regardless of ties.
     let prev = Tensor::from_vec(vec![fixture.greedy0], (1, 1), &device).unwrap();
@@ -94,7 +98,16 @@ fn candle_forward_matches_torch_f32() {
 
     assert_eq!(argmax(&logits0), fixture.greedy0, "token step 0 greedy id");
     assert_eq!(argmax(&logits1), fixture.greedy1, "token step 1 greedy id");
-    assert!(cosine(&hidden_rs, &fixture.hidden) > 0.9999, "hidden cosine");
-    assert!(cosine(&logits0, &fixture.logits0) > 0.9999, "logits0 cosine");
-    assert!(cosine(&logits1, &fixture.logits1) > 0.9999, "logits1 cosine");
+    assert!(
+        cosine(&hidden_rs, &fixture.hidden) > 0.9999,
+        "hidden cosine"
+    );
+    assert!(
+        cosine(&logits0, &fixture.logits0) > 0.9999,
+        "logits0 cosine"
+    );
+    assert!(
+        cosine(&logits1, &fixture.logits1) > 0.9999,
+        "logits1 cosine"
+    );
 }

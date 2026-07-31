@@ -10,10 +10,7 @@ use rand::Rng;
 
 /// Softmax with temperature over raw logits.
 pub fn softmax_with_temp(logits: &[f32], temperature: f32) -> Vec<f32> {
-    let max = logits
-        .iter()
-        .copied()
-        .fold(f32::NEG_INFINITY, f32::max);
+    let max = logits.iter().copied().fold(f32::NEG_INFINITY, f32::max);
     let mut probs: Vec<f32> = logits
         .iter()
         .map(|&l| ((l - max) / temperature).exp())

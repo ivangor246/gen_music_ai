@@ -29,5 +29,8 @@ fn midi_bytes_match_python() {
 
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/reference.mid");
     let expected = std::fs::read(path).unwrap();
-    assert_eq!(produced, expected, "MIDI bytes differ from python reference");
+    assert_eq!(
+        produced, expected,
+        "MIDI bytes differ from python reference"
+    );
 }

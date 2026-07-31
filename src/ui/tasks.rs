@@ -95,7 +95,9 @@ pub fn build_timeline(track: crate::services::generation::GeneratedTrack) -> Tas
             .map(Hidden);
         match result {
             Ok(timeline) => Message::TimelineReady(timeline),
-            Err(_) => Message::TimelineReady(Hidden(crate::services::timeline::Timeline::default())),
+            Err(_) => {
+                Message::TimelineReady(Hidden(crate::services::timeline::Timeline::default()))
+            }
         }
     })
 }

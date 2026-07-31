@@ -73,7 +73,10 @@ impl Program<Message> for DensityCanvas<'_> {
         if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) = event {
             if let Some(position) = cursor.position_in(bounds) {
                 let fraction = (position.x / bounds.width).clamp(0.0, 1.0);
-                return (canvas::event::Status::Captured, Some(Message::Seek(fraction)));
+                return (
+                    canvas::event::Status::Captured,
+                    Some(Message::Seek(fraction)),
+                );
             }
         }
         (canvas::event::Status::Ignored, None)

@@ -4,7 +4,9 @@
 //! order.
 
 use super::events::EventType;
-use super::vocab::{MAX_TOKEN_SEQ, PAD_ID, event_type_from_id, event_type_id, field_base, field_token};
+use super::vocab::{
+    MAX_TOKEN_SEQ, PAD_ID, event_type_from_id, event_type_id, field_base, field_token,
+};
 
 pub type TokenRow = [i16; MAX_TOKEN_SEQ];
 

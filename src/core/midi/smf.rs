@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 use std::io::{self, Write};
 
-use super::score::{Action, TimedAction, TICKS_PER_QUARTER};
+use super::score::{Action, TICKS_PER_QUARTER, TimedAction};
 
 #[derive(Default)]
 struct TrackBuffer {

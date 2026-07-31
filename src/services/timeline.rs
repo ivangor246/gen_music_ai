@@ -59,8 +59,7 @@ impl Timeline {
         let mut counts = vec![0u32; bins];
         for event in &self.events {
             if matches!(event.action, Action::NoteOn { .. }) {
-                let index =
-                    ((event.seconds / self.duration * bins as f64) as usize).min(bins - 1);
+                let index = ((event.seconds / self.duration * bins as f64) as usize).min(bins - 1);
                 counts[index] += 1;
             }
         }

@@ -65,7 +65,10 @@ impl SynthEngine for OxiSynth {
     }
 
     fn note_off(&mut self, channel: u8, pitch: u8) {
-        self.send(MidiEvent::NoteOff { channel, key: pitch });
+        self.send(MidiEvent::NoteOff {
+            channel,
+            key: pitch,
+        });
     }
 
     fn control_change(&mut self, channel: u8, controller: u8, value: u8) {

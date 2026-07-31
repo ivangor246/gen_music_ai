@@ -99,6 +99,9 @@ mod tests {
     fn beyond_params_is_pad() {
         let flags = DecodeFlags::new(false, false, true, &[]);
         // set_tempo has 4 params; slot 5 must be pad.
-        assert_eq!(allowed_param_ids(EventType::SetTempo, 5, &flags), vec![PAD_ID]);
+        assert_eq!(
+            allowed_param_ids(EventType::SetTempo, 5, &flags),
+            vec![PAD_ID]
+        );
     }
 }
