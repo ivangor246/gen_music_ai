@@ -20,7 +20,7 @@ Generation runs entirely on the CPU and does not require a GPU or a remote infer
 
 ## Requirements
 
-- Rust 1.85 or newer (the project uses Rust edition 2024).
+- Rust 1.89.0, installed automatically by `rustup` from `rust-toolchain.toml`.
 - `curl` and either `sha256sum` or `shasum` for downloading runtime assets.
 - Approximately 520 MB of disk space for the model checkpoint and SoundFont, in addition to
   build artifacts.
@@ -84,6 +84,12 @@ cargo build --release --locked --features embed
 The embedded build does not require separate model or SoundFont files at runtime, but it is
 larger and still depends on the operating system's supported audio and graphics facilities.
 The assets are required before running the default build or compiling with the `embed` feature.
+
+Pushing a tag that matches the package version, such as `v0.1.0`, starts the release workflow.
+It publishes unsigned, self-contained archives for x86-64 Linux, Windows, and macOS together
+with SHA-256 checksum files and a corresponding source archive. Each binary archive includes
+the license notices, relinking instructions, and required third-party source packages. Update
+the version in `Cargo.toml` before creating a new release tag.
 
 ## User Data and Exports
 

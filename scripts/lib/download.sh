@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/checksum.sh"
+
 DOWNLOAD_TEMPORARY=""
 
 cleanup_download() {
@@ -9,17 +11,6 @@ cleanup_download() {
 }
 
 trap cleanup_download EXIT
-
-sha256_file() {
-    if command -v sha256sum >/dev/null 2>&1; then
-        sha256sum "$1" | awk '{print $1}'
-    elif command -v shasum >/dev/null 2>&1; then
-        shasum -a 256 "$1" | awk '{print $1}'
-    else
-        printf '%s\n' "Neither sha256sum nor shasum is available." >&2
-        return 1
-    fi
-}
 
 download_verified_file() {
     local name="$1"

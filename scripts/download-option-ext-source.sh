@@ -13,4 +13,8 @@ readonly SHA256="04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7
 
 source "${SCRIPT_DIR}/lib/download.sh"
 
-download_verified_file +    "${PACKAGE} ${VERSION} source" +    "${URL}" +    "${SHA256}" +    "${DESTINATION}/${FILENAME}"
+download_verified_file \
+    "${PACKAGE} ${VERSION} source" \
+    "${URL}" \
+    "${SHA256}" \
+    "${DESTINATION}/${FILENAME}"
