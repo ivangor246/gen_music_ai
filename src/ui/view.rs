@@ -16,21 +16,23 @@ use super::state::{CONTEXT_WINDOWS, DRUM_KITS, ModelState, State, TIME_SIGNATURE
 use super::theme;
 
 const WIDE_LAYOUT_THRESHOLD: f32 = 960.0;
+const WIDE_HEADER_THRESHOLD: f32 = 1_080.0;
 const COMBO_WIDTH: f32 = 175.0;
 
 pub fn view(state: &State) -> Element<'_, Message> {
     let wide = state.viewport_width >= WIDE_LAYOUT_THRESHOLD;
-    let header: Element<'_, Message> = if wide {
+    let wide_header = state.viewport_width >= WIDE_HEADER_THRESHOLD;
+    let header: Element<'_, Message> = if wide_header {
         row![
             container(model_panel(state)).width(Length::FillPortion(2)),
-            container(presets_panel(state, wide)).width(Length::FillPortion(3)),
+            container(presets_panel(state, wide_header)).width(Length::FillPortion(3)),
         ]
         .align_y(Alignment::Center)
         .height(Length::Shrink)
         .spacing(theme::SPACE_MD)
         .into()
     } else {
-        column![model_panel(state), presets_panel(state, wide)]
+        column![model_panel(state), presets_panel(state, wide_header)]
             .spacing(theme::SPACE_MD)
             .into()
     };
@@ -110,13 +112,17 @@ fn presets_panel(state: &State, wide: bool) -> Element<'_, Message> {
         .map(|p| p.name)
         .collect();
     let picker = pick_list(names, state.selected_preset.clone(), Message::SelectPreset)
-        .placeholder("Select a preset")
+        .placeholder("Select preset")
         .style(theme::selection)
-        .width(Length::Fixed(130.0));
+        .text_size(14)
+        .handle(pick_list::Handle::Arrow {
+            size: Some(10.0.into()),
+        })
+        .width(Length::Fixed(220.0));
     let name_input = text_input("Preset name", &state.new_preset_name)
         .on_input(Message::PresetNameInput)
         .style(theme::input)
-        .width(Length::Fixed(145.0));
+        .width(Length::Fixed(130.0));
     let delete = button(text("×  Delete")).style(theme::danger_button);
     let delete = if state
         .selected_preset
