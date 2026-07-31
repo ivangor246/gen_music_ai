@@ -9,6 +9,7 @@ fi
 
 readonly REPOSITORY_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 source "${REPOSITORY_ROOT}/scripts/lib/archive.sh"
+source "${REPOSITORY_ROOT}/scripts/lib/platform-package.sh"
 
 readonly BINARY_PATH="$1"
 readonly VERSION="$2"
@@ -31,13 +32,21 @@ if [[ ! "${TARGET}" =~ ^[0-9A-Za-z_.-]+$ ]]; then
 fi
 
 readonly PACKAGE_NAME="gen_music_ai-${VERSION}-${TARGET}"
+readonly APP_ICON="${REPOSITORY_ROOT}/assets/icons/app-icon.png"
 
 create_archive_stage
 readonly PACKAGE_DIRECTORY="${ARCHIVE_TEMPORARY}/${PACKAGE_NAME}"
 readonly SOURCE_DIRECTORY="${PACKAGE_DIRECTORY}/third-party-sources"
 
 mkdir -p -- "${PACKAGE_DIRECTORY}" "${SOURCE_DIRECTORY}" "${OUTPUT_DIRECTORY}"
-cp -- "${BINARY_PATH}" "${PACKAGE_DIRECTORY}/"
+package_platform_binary \
+    "${TARGET}" \
+    "${REPOSITORY_ROOT}" \
+    "${BINARY_PATH}" \
+    "${PACKAGE_DIRECTORY}" \
+    "${APP_ICON}" \
+    "${VERSION}" \
+    "${ARCHIVE_TEMPORARY}"
 cp -- \
     "${REPOSITORY_ROOT}/LICENSE" \
     "${REPOSITORY_ROOT}/README.md" \

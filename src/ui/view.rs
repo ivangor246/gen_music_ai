@@ -52,13 +52,16 @@ fn model_panel(state: &State) -> Element<'_, Message> {
     };
     section(
         "Model",
-        row![
-            text("General-purpose MIDI model (tv2o-medium)"),
-            Space::with_width(Length::Fill),
-            load,
+        column![
+            row![
+                text("General-purpose MIDI model (tv2o-medium)"),
+                Space::with_width(Length::Fill),
+                load,
+            ]
+            .spacing(10),
+            text(status),
         ]
-        .spacing(10)
-        .push(text(status))
+        .spacing(6)
         .into(),
     )
 }
@@ -94,6 +97,7 @@ fn presets_panel(state: &State) -> Element<'_, Message> {
             delete,
         ]
         .spacing(8)
+        .wrap()
         .into(),
     )
 }
@@ -154,21 +158,23 @@ fn composition_form(state: &State) -> Element<'_, Message> {
     .spacing(6)
     .width(Length::FillPortion(1));
 
-    row![instruments, controls].spacing(14).into()
+    row![instruments, controls].spacing(14).wrap().into()
 }
 
 fn params_panel(state: &State) -> Element<'_, Message> {
     let sliders = row![
-        labeled(
+        labeled_value(
             "Temperature",
+            format!("{:.2}", state.temperature),
             slider(0.1..=1.2, state.temperature, |v| Message::Form(
                 FormMsg::Temperature(v)
             ))
             .step(0.01)
             .width(Length::Fixed(160.0)),
         ),
-        labeled(
+        labeled_value(
             "Probability Threshold",
+            format!("{:.2}", state.top_p),
             slider(0.1..=1.0, state.top_p, |v| Message::Form(FormMsg::TopP(v)))
                 .step(0.01)
                 .width(Length::Fixed(160.0)),
@@ -181,7 +187,8 @@ fn params_panel(state: &State) -> Element<'_, Message> {
         )),
         number("Seed", &state.seed, |v| Message::Form(FormMsg::Seed(v))),
     ]
-    .spacing(12);
+    .spacing(12)
+    .wrap();
 
     let toggles = row![
         checkbox("Random Seed", state.random_seed)
@@ -195,19 +202,23 @@ fn params_panel(state: &State) -> Element<'_, Message> {
             |v| Message::Form(FormMsg::ContextWindow(v)),
         ),
     ]
-    .spacing(12);
+    .spacing(12)
+    .wrap();
 
     let generate = if state.generating {
         button(text("Stop")).on_press(Message::CancelGeneration)
     } else {
         button(text("Generate")).on_press(Message::Generate)
     };
-    let controls = row![
-        generate,
-        progress_bar(0.0..=1.0, state.progress).width(Length::Fill),
+    let controls = column![
+        row![
+            generate,
+            progress_bar(0.0..=1.0, state.progress).width(Length::Fill),
+        ]
+        .spacing(10),
         text(&state.status),
     ]
-    .spacing(10);
+    .spacing(6);
 
     section(
         "Generation Parameters",
@@ -264,12 +275,15 @@ fn results_panel(state: &State) -> Element<'_, Message> {
         button(text("Open Save Folder")).on_press(Message::OpenSaveDirectory),
         clear_cache,
     ]
-    .spacing(8);
+    .spacing(8)
+    .wrap();
 
     section(
         "Results",
         column![
-            row![text("Track to play and save"), selector].spacing(10),
+            row![text("Track to play and save"), selector]
+                .spacing(10)
+                .wrap(),
             text(durations),
             export,
             player_panel(state),
@@ -313,7 +327,8 @@ fn player_panel(state: &State) -> Element<'_, Message> {
             time_label(state.duration)
         )),
     ]
-    .spacing(8);
+    .spacing(8)
+    .wrap();
 
     container(column![visualization, seek, controls].spacing(6))
         .padding(8)
@@ -326,6 +341,24 @@ fn labeled<'a>(label: &'a str, widget: impl Into<Element<'a, Message>>) -> Eleme
     column![text(label).size(13), widget.into()]
         .spacing(2)
         .into()
+}
+
+fn labeled_value<'a>(
+    label: &'a str,
+    value: String,
+    widget: impl Into<Element<'a, Message>>,
+) -> Element<'a, Message> {
+    column![
+        row![
+            text(label).size(13),
+            Space::with_width(Length::Fill),
+            text(value).size(13)
+        ],
+        widget.into(),
+    ]
+    .spacing(2)
+    .width(Length::Fixed(180.0))
+    .into()
 }
 
 fn number<'a>(

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Gen Music AI
+Comment=Generate multi-instrument music locally
+Exec=gen_music_ai
+Icon=io.github.ivangor246.gen_music_ai
+Terminal=false
+Categories=AudioVideo;Audio;
+Keywords=music;MIDI;generation;
+StartupWMClass=io.github.ivangor246.gen_music_ai

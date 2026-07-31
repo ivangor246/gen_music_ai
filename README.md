@@ -92,7 +92,9 @@ Pushing a tag that matches the package version, such as `v0.1.0`, starts the rel
 It publishes unsigned, self-contained archives for x86-64 Linux, Windows, and macOS together
 with SHA-256 checksum files and a corresponding source archive. Each binary archive includes
 the license notices, relinking instructions, and required third-party source packages. Update
-the version in `Cargo.toml` before creating a new release tag.
+the version in `Cargo.toml` before creating a new release tag. The macOS archive contains an
+application bundle, while the Linux archive includes desktop integration metadata and the
+Windows archive includes the application icon for portable distribution.
 
 ## User Data and Exports
 
@@ -154,8 +156,9 @@ Heavy tests remain opt-in and are not executed by the default workflow.
 - `src/services/` — generation, token storage, playback, synthesis, export, presets, and settings.
 - `src/ui/` — Iced application state, messages, tasks, views, and timeline visualization.
 - `models/` — tracked model configuration and the downloaded checkpoint location.
-- `assets/` — downloaded SoundFont location.
+- `assets/` — application icon resources and the downloaded SoundFont location.
 - `licenses/` — complete license and attribution texts for bundled third-party components.
+- `packaging/` — platform-specific desktop metadata and icon resources.
 - `scripts/` — reproducible asset and third-party source downloads with checksum verification.
 - `tests/` — lightweight tests, opt-in model tests, fixtures, and the generation benchmark.
 
