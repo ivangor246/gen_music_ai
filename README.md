@@ -125,6 +125,17 @@ Check formatting with:
 cargo fmt --all -- --check
 ```
 
+Audit the licenses in the locked Rust dependency graph with all features enabled using
+[`cargo-deny`](https://github.com/EmbarkStudios/cargo-deny):
+
+```bash
+cargo deny --all-features --locked check licenses
+```
+
+The license policy is defined in `deny.toml` and is enforced automatically for pushes and pull
+requests. Copyleft exceptions are limited to the pinned packages documented in
+`THIRD_PARTY_NOTICES.md`.
+
 ## Project Structure
 
 - `src/core/` — model implementation, sampling constraints, tokenizer, and MIDI encoding.

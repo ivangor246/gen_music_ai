@@ -46,4 +46,20 @@ source, and the verified OxiSynth source packages described in `RELINKING.md`. D
 must permit modification for personal use and reverse engineering for debugging those
 modifications.
 
-Other Rust dependencies retain the licenses declared by their respective packages.
+## option-ext
+
+The `directories` dependency uses option-ext 0.2.0, which is licensed under the Mozilla Public
+License version 2.0 (MPL-2.0).
+
+- Upstream revision:
+  <https://github.com/soc/option-ext/tree/272f22fc9ea1ac6b08f01704af52c4ac338df4e2>
+- Package: <https://crates.io/crates/option-ext/0.2.0>
+- License: [`licenses/MPL-2.0.txt`](licenses/MPL-2.0.txt)
+
+The unmodified source archive can be downloaded and checksum-verified with
+`scripts/download-option-ext-source.sh`. Binary distributions must make this source available
+and state where recipients can obtain it.
+
+Other Rust dependencies retain the licenses declared by their respective packages. The accepted
+license policy for the complete locked dependency graph is defined in [`deny.toml`](deny.toml) and
+enforced by the repository's license-audit workflow.
