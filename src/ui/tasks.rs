@@ -32,13 +32,13 @@ where
     Task::stream(stream)
 }
 
-/// Load the model from the embedded checkpoint.
+/// Load the model from the configured checkpoint.
 pub fn load_model() -> Task<Message> {
     run_once(|| {
         let result = ModelConfig::from_json(crate::assets::CONFIG_JSON)
-            .map_err(|e| e.to_string())
+            .map_err(|error| error.to_string())
             .and_then(|config| {
-                MidiModel::load(config, candle_core::Device::Cpu).map_err(|e| e.to_string())
+                MidiModel::load(config, candle_core::Device::Cpu).map_err(|error| error.to_string())
             });
         Message::ModelLoaded(result.map(|model| Hidden(Arc::new(model))))
     })

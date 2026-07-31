@@ -18,7 +18,7 @@ use crate::assets;
 
 /// Load every tensor as f32 on the given device, keyed by its checkpoint name.
 pub fn load_tensors(device: &Device) -> Result<HashMap<String, Tensor>> {
-    let bytes = assets::model_safetensors();
+    let bytes = assets::model_safetensors()?;
     let safetensors =
         SafeTensors::deserialize(bytes.as_ref()).context("parsing model.safetensors")?;
     let mut tensors = HashMap::new();

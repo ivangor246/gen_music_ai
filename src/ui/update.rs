@@ -198,7 +198,13 @@ fn play(state: &mut State) -> Task<Message> {
     }
     if state.player.is_none() {
         state.status = "Preparing audio…".to_string();
-        let soundfont = crate::assets::soundfont();
+        let soundfont = match crate::assets::soundfont() {
+            Ok(soundfont) => soundfont,
+            Err(error) => {
+                state.status = format!("Audio is unavailable: {error:#}");
+                return Task::none();
+            }
+        };
         match PlaybackEngine::new(soundfont.as_ref()) {
             Ok(engine) => state.player = Some(engine),
             Err(error) => {
@@ -253,16 +259,17 @@ fn save_selected(state: &mut State, wav: bool) -> Task<Message> {
     };
 
     let target = Some(track.target_tick);
-    let soundfont = crate::assets::soundfont().into_owned();
     tasks::run_once(move || {
         let result = if wav {
-            save_wav(&track.token_path, &path, &soundfont, target)
+            crate::assets::soundfont().and_then(|soundfont| {
+                save_wav(&track.token_path, &path, soundfont.as_ref(), target)
+            })
         } else {
             save_midi(&track.token_path, &path, target)
         };
         match result {
             Ok(()) => Message::Saved(Ok(path.display().to_string())),
-            Err(error) => Message::Saved(Err(error.to_string())),
+            Err(error) => Message::Saved(Err(format!("{error:#}"))),
         }
     })
 }

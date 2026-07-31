@@ -38,7 +38,7 @@ fn wav_has_correct_format_and_length() {
     }
     file.flush().unwrap();
 
-    let soundfont = assets::soundfont();
+    let soundfont = assets::soundfont().unwrap();
     save_wav(
         &token_path,
         &wav_path,
