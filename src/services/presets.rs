@@ -51,25 +51,25 @@ fn builtin(
 
 fn default_presets() -> Vec<Preset> {
     vec![
-        builtin("Баллада", &["Bright Acoustic", "Cello", "String Ensemble 1"], "Нет", 76, "4/4", 24, 20, 0.88, 0.92, 18),
-        builtin("Биосферный эмбиент", &["Pad 1 (new age)", "Pad 7 (halo)", "FX 4 (atmosphere)", "Synth Voice"], "Нет", 64, "4/4", 24, 18, 0.9, 0.96, 24),
-        builtin("Джазовый квартет", &["Acoustic Grand", "Acoustic Bass", "Tenor Sax"], "Джазовая", 132, "4/4", 32, 30, 1.0, 0.95, 32),
-        builtin("Загадочный саундтрек", &["Pizzicato Strings", "Clarinet", "Pad 1 (new age)"], "Нет", 72, "3/4", 24, 24, 1.02, 0.97, 36),
-        builtin("Кинематографический эпос", &["String Ensemble 1", "Cello", "French Horn", "Tuba", "Orchestra Hit"], "Оркестровая", 104, "4/4", 32, 38, 0.94, 0.95, 30),
-        builtin("Классическое фортепиано", &["Acoustic Grand"], "Нет", 84, "4/4", 24, 18, 0.85, 0.92, 16),
-        builtin("Лоу-фай хип-хоп", &["Electric Piano 1", "Acoustic Bass", "Pad 2 (warm)"], "Мягкая", 78, "4/4", 32, 26, 0.96, 0.95, 28),
-        builtin("Медитативная музыка", &["Flute", "Pad 1 (new age)", "Pad 2 (warm)"], "Нет", 60, "4/4", 24, 16, 0.82, 0.92, 16),
-        builtin("Неоновая заставка", &["Electric Piano 2", "Pad 3 (polysynth)", "FX 3 (crystal)", "Synth Bass 2"], "Электронная", 92, "4/4", 24, 24, 0.94, 0.95, 28),
-        builtin("Пульсирующее напряжение", &["Pizzicato Strings", "Synth Bass 2", "Pad 6 (metallic)", "Reverse Cymbal"], "Электронная", 122, "4/4", 32, 34, 1.03, 0.97, 38),
-        builtin("Рок", &["Electric Guitar(clean)", "Overdriven Guitar", "Electric Bass(finger)"], "Стандартная", 120, "4/4", 32, 30, 1.0, 0.94, 24),
-        builtin("Симфонический оркестр", &["Acoustic Grand", "String Ensemble 1", "Cello", "French Horn", "Flute", "Oboe"], "Оркестровая", 96, "4/4", 32, 34, 0.95, 0.96, 28),
-        builtin("Тактический синтвейв", &["Lead 8 (bass+lead)", "Pad 3 (polysynth)", "Synth Bass 1", "Orchestra Hit"], "TR-808", 116, "4/4", 32, 32, 1.0, 0.96, 34),
-        builtin("Тревожный саундтрек", &["Tremolo Strings", "Pizzicato Strings", "Synth Bass 1", "Orchestra Hit"], "Оркестровая", 116, "7/8", 32, 36, 1.08, 0.97, 42),
-        builtin("Фанк", &["Electric Guitar(muted)", "Electric Bass(finger)", "Electric Piano 1"], "Комнатная", 112, "4/4", 32, 34, 1.0, 0.94, 28),
-        builtin("Фолк", &["Acoustic Guitar(steel)", "Violin", "Flute"], "Нет", 104, "6/8", 24, 24, 0.92, 0.94, 24),
-        builtin("Чиптюн", &["Lead 2 (sawtooth)", "Lead 5 (charang)", "Synth Bass 1"], "Электронная", 150, "4/4", 32, 32, 1.02, 0.96, 36),
-        builtin("Электронная музыка", &["Lead 2 (sawtooth)", "Pad 2 (warm)", "Synth Bass 1"], "TR-808", 128, "4/4", 32, 32, 1.05, 0.97, 40),
-        builtin("Эмбиент", &["Pad 1 (new age)", "Pad 2 (warm)", "SynthStrings 1"], "Нет", 70, "4/4", 24, 20, 0.9, 0.96, 24),
+        builtin("Ballad", &["Bright Acoustic", "Cello", "String Ensemble 1"], "None", 76, "4/4", 24, 20, 0.88, 0.92, 18),
+        builtin("Biosphere Ambient", &["Pad 1 (new age)", "Pad 7 (halo)", "FX 4 (atmosphere)", "Synth Voice"], "None", 64, "4/4", 24, 18, 0.9, 0.96, 24),
+        builtin("Jazz Quartet", &["Acoustic Grand", "Acoustic Bass", "Tenor Sax"], "Jazz", 132, "4/4", 32, 30, 1.0, 0.95, 32),
+        builtin("Mysterious Soundtrack", &["Pizzicato Strings", "Clarinet", "Pad 1 (new age)"], "None", 72, "3/4", 24, 24, 1.02, 0.97, 36),
+        builtin("Cinematic Epic", &["String Ensemble 1", "Cello", "French Horn", "Tuba", "Orchestra Hit"], "Orchestra", 104, "4/4", 32, 38, 0.94, 0.95, 30),
+        builtin("Classical Piano", &["Acoustic Grand"], "None", 84, "4/4", 24, 18, 0.85, 0.92, 16),
+        builtin("Lo-Fi Hip-Hop", &["Electric Piano 1", "Acoustic Bass", "Pad 2 (warm)"], "Brush", 78, "4/4", 32, 26, 0.96, 0.95, 28),
+        builtin("Meditative Music", &["Flute", "Pad 1 (new age)", "Pad 2 (warm)"], "None", 60, "4/4", 24, 16, 0.82, 0.92, 16),
+        builtin("Neon Intro", &["Electric Piano 2", "Pad 3 (polysynth)", "FX 3 (crystal)", "Synth Bass 2"], "Electronic", 92, "4/4", 24, 24, 0.94, 0.95, 28),
+        builtin("Pulsing Tension", &["Pizzicato Strings", "Synth Bass 2", "Pad 6 (metallic)", "Reverse Cymbal"], "Electronic", 122, "4/4", 32, 34, 1.03, 0.97, 38),
+        builtin("Rock", &["Electric Guitar(clean)", "Overdriven Guitar", "Electric Bass(finger)"], "Standard", 120, "4/4", 32, 30, 1.0, 0.94, 24),
+        builtin("Symphonic Orchestra", &["Acoustic Grand", "String Ensemble 1", "Cello", "French Horn", "Flute", "Oboe"], "Orchestra", 96, "4/4", 32, 34, 0.95, 0.96, 28),
+        builtin("Tactical Synthwave", &["Lead 8 (bass+lead)", "Pad 3 (polysynth)", "Synth Bass 1", "Orchestra Hit"], "TR-808", 116, "4/4", 32, 32, 1.0, 0.96, 34),
+        builtin("Suspense Soundtrack", &["Tremolo Strings", "Pizzicato Strings", "Synth Bass 1", "Orchestra Hit"], "Orchestra", 116, "7/8", 32, 36, 1.08, 0.97, 42),
+        builtin("Funk", &["Electric Guitar(muted)", "Electric Bass(finger)", "Electric Piano 1"], "Room", 112, "4/4", 32, 34, 1.0, 0.94, 28),
+        builtin("Folk", &["Acoustic Guitar(steel)", "Violin", "Flute"], "None", 104, "6/8", 24, 24, 0.92, 0.94, 24),
+        builtin("Chiptune", &["Lead 2 (sawtooth)", "Lead 5 (charang)", "Synth Bass 1"], "Electronic", 150, "4/4", 32, 32, 1.02, 0.96, 36),
+        builtin("Electronic Music", &["Lead 2 (sawtooth)", "Pad 2 (warm)", "Synth Bass 1"], "TR-808", 128, "4/4", 32, 32, 1.05, 0.97, 40),
+        builtin("Ambient", &["Pad 1 (new age)", "Pad 2 (warm)", "SynthStrings 1"], "None", 70, "4/4", 24, 20, 0.9, 0.96, 24),
     ]
 }
 
@@ -111,10 +111,10 @@ impl PresetStore {
     pub fn save(&mut self, name: &str, settings: GenerationSettings) -> Result<()> {
         let clean = name.trim();
         if clean.is_empty() {
-            bail!("Введите название пресета.");
+            bail!("Enter a preset name.");
         }
         if default_presets().iter().any(|preset| preset.name == clean) {
-            bail!("Название занято стандартным пресетом.");
+            bail!("That name is already used by a built-in preset.");
         }
         self.user.retain(|preset| preset.name != clean);
         self.user.push(Preset {
@@ -128,7 +128,7 @@ impl PresetStore {
 
     pub fn delete(&mut self, name: &str) -> Result<()> {
         if !self.user.iter().any(|preset| preset.name == name) {
-            bail!("Стандартные пресеты удалить нельзя.");
+            bail!("Built-in presets cannot be deleted.");
         }
         self.user.retain(|preset| preset.name != name);
         self.persist();

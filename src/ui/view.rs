@@ -12,7 +12,6 @@ use crate::services::generation::KEY_SIGNATURES;
 use crate::settings::AUTO_VALUE;
 
 use super::density_canvas::DensityCanvas;
-use super::gm_names_ru::instrument_label;
 use super::message::{FormMsg, Message, Tab};
 use super::state::{CONTEXT_WINDOWS, DRUM_KITS, ModelState, State, TIME_SIGNATURES};
 
@@ -39,16 +38,16 @@ fn section<'a>(title: &'a str, body: Element<'a, Message>) -> Element<'a, Messag
 
 fn model_panel(state: &State) -> Element<'_, Message> {
     let status = match &state.model {
-        ModelState::NotLoaded => "Будет загружена по запросу".to_string(),
-        ModelState::Loading => "Загрузка…".to_string(),
-        ModelState::Ready(_) => "Загружена: вычисления на CPU".to_string(),
-        ModelState::Failed(error) => format!("Ошибка: {error}"),
+        ModelState::NotLoaded => "Loaded on demand".to_string(),
+        ModelState::Loading => "Loading…".to_string(),
+        ModelState::Ready(_) => "Loaded: CPU inference".to_string(),
+        ModelState::Failed(error) => format!("Error: {error}"),
     };
-    let load = button(text("Загрузить модель")).on_press(Message::LoadModel);
+    let load = button(text("Load Model")).on_press(Message::LoadModel);
     section(
-        "Модель",
+        "Model",
         row![
-            text("Универсальная модель MIDI (tv2o-medium)"),
+            text("General-purpose MIDI model (tv2o-medium)"),
             Space::with_width(Length::Fill),
             load,
         ]
@@ -61,17 +60,17 @@ fn model_panel(state: &State) -> Element<'_, Message> {
 fn presets_panel(state: &State) -> Element<'_, Message> {
     let names: Vec<String> = state.preset_store.all().into_iter().map(|p| p.name).collect();
     let picker = pick_list(names, state.selected_preset.clone(), Message::SelectPreset)
-        .placeholder("Выберите пресет");
-    let name_input = text_input("Название пресета", &state.new_preset_name)
+        .placeholder("Select a preset");
+    let name_input = text_input("Preset name", &state.new_preset_name)
         .on_input(Message::PresetNameInput)
         .width(Length::Fixed(200.0));
     section(
-        "Пресеты",
+        "Presets",
         row![
             picker,
             name_input,
-            button(text("Сохранить текущий")).on_press(Message::SavePreset),
-            button(text("Удалить")).on_press(Message::DeletePreset),
+            button(text("Save Current")).on_press(Message::SavePreset),
+            button(text("Delete")).on_press(Message::DeletePreset),
         ]
         .spacing(8)
         .into(),
@@ -84,37 +83,37 @@ fn tabs_panel(state: &State) -> Element<'_, Message> {
         if active { b } else { b.style(button::secondary) }
     };
     let bar = row![
-        tab_button("Новая композиция", Tab::NewComposition, matches!(state.tab, Tab::NewComposition)),
-        tab_button("Продолжить MIDI-файл", Tab::ContinueMidi, matches!(state.tab, Tab::ContinueMidi)),
-        tab_button("Продолжить результат", Tab::ContinueResult, matches!(state.tab, Tab::ContinueResult)),
+        tab_button("New Composition", Tab::NewComposition, matches!(state.tab, Tab::NewComposition)),
+        tab_button("Continue MIDI File", Tab::ContinueMidi, matches!(state.tab, Tab::ContinueMidi)),
+        tab_button("Continue Result", Tab::ContinueResult, matches!(state.tab, Tab::ContinueResult)),
     ]
     .spacing(6);
 
     let body: Element<Message> = match state.tab {
         Tab::NewComposition => composition_tab(state),
         Tab::ContinueMidi => text(
-            "Продолжение MIDI-файла появится в следующей версии порта.",
+            "MIDI file continuation will be available in a future version.",
         )
         .into(),
         Tab::ContinueResult => text(
-            "Продолжение результата появится в следующей версии порта.",
+            "Result continuation will be available in a future version.",
         )
         .into(),
     };
 
-    section("Ввод", column![bar, body].spacing(8).into())
+    section("Input", column![bar, body].spacing(8).into())
 }
 
 fn composition_tab(state: &State) -> Element<'_, Message> {
     let mut list = column![].spacing(2);
     for index in 0..PATCH_NAMES.len() {
         list = list.push(
-            checkbox(instrument_label(index), state.instruments[index])
+            checkbox(PATCH_NAMES[index], state.instruments[index])
                 .on_toggle(move |_| Message::ToggleInstrument(index)),
         );
     }
     let instruments = column![
-        text("Инструменты (до 15, пустой список — выбор модели)"),
+        text("Instruments (up to 15; empty lets the model choose)"),
         scrollable(list).height(Length::Fixed(220.0)),
     ]
     .spacing(4)
@@ -125,18 +124,18 @@ fn composition_tab(state: &State) -> Element<'_, Message> {
         .collect();
 
     let controls = column![
-        combo("Ударная установка", DRUM_KITS.to_vec(), &state.drum_kit, |v| {
+        combo("Drum Kit", DRUM_KITS.to_vec(), &state.drum_kit, |v| {
             Message::Form(FormMsg::DrumKit(v))
         }),
-        number("Темп, ударов в минуту", &state.bpm, |v| Message::Form(FormMsg::Bpm(v))),
-        combo("Размер такта", TIME_SIGNATURES.to_vec(), &state.time_signature, |v| {
+        number("Tempo (BPM)", &state.bpm, |v| Message::Form(FormMsg::Bpm(v))),
+        combo("Time Signature", TIME_SIGNATURES.to_vec(), &state.time_signature, |v| {
             Message::Form(FormMsg::TimeSignature(v))
         }),
-        combo_owned("Тональность", key_options, &state.key_signature, |v| {
+        combo_owned("Key Signature", key_options, &state.key_signature, |v| {
             Message::Form(FormMsg::KeySignature(v))
         }),
-        number("Длина, тактов", &state.bars, |v| Message::Form(FormMsg::Bars(v))),
-        number("Резерв событий на такт", &state.events_per_bar, |v| {
+        number("Length (bars)", &state.bars, |v| Message::Form(FormMsg::Bars(v))),
+        number("Event Budget per Bar", &state.events_per_bar, |v| {
             Message::Form(FormMsg::EventsPerBar(v))
         }),
         text(state.length_label()),
@@ -150,30 +149,30 @@ fn composition_tab(state: &State) -> Element<'_, Message> {
 fn params_panel(state: &State) -> Element<'_, Message> {
     let sliders = row![
         labeled(
-            "Температура",
+            "Temperature",
             slider(0.1..=1.2, state.temperature, |v| Message::Form(FormMsg::Temperature(v)))
                 .step(0.01)
                 .width(Length::Fixed(160.0)),
         ),
         labeled(
-            "Порог вероятности",
+            "Probability Threshold",
             slider(0.1..=1.0, state.top_p, |v| Message::Form(FormMsg::TopP(v)))
                 .step(0.01)
                 .width(Length::Fixed(160.0)),
         ),
-        number("Число вариантов", &state.top_k, |v| Message::Form(FormMsg::TopK(v))),
-        number("Количество результатов", &state.batch, |v| Message::Form(FormMsg::Batch(v))),
-        number("Начальное значение", &state.seed, |v| Message::Form(FormMsg::Seed(v))),
+        number("Top-k Candidates", &state.top_k, |v| Message::Form(FormMsg::TopK(v))),
+        number("Result Count", &state.batch, |v| Message::Form(FormMsg::Batch(v))),
+        number("Seed", &state.seed, |v| Message::Form(FormMsg::Seed(v))),
     ]
     .spacing(12);
 
     let toggles = row![
-        checkbox("Случайное начальное значение", state.random_seed)
+        checkbox("Random Seed", state.random_seed)
             .on_toggle(|v| Message::Form(FormMsg::RandomSeed(v))),
-        checkbox("Разрешить управляющие MIDI-события", state.allow_cc)
+        checkbox("Allow MIDI Control Changes", state.allow_cc)
             .on_toggle(|v| Message::Form(FormMsg::AllowControlChanges(v))),
         combo_owned(
-            "Музыкальная память",
+            "Musical Memory",
             CONTEXT_WINDOWS.iter().map(|s| s.to_string()).collect(),
             &state.context_window,
             |v| Message::Form(FormMsg::ContextWindow(v)),
@@ -182,9 +181,9 @@ fn params_panel(state: &State) -> Element<'_, Message> {
     .spacing(12);
 
     let generate = if state.generating {
-        button(text("Остановить")).on_press(Message::CancelGeneration)
+        button(text("Stop")).on_press(Message::CancelGeneration)
     } else {
-        button(text("Сгенерировать")).on_press(Message::Generate)
+        button(text("Generate")).on_press(Message::Generate)
     };
     let controls = row![
         generate,
@@ -194,16 +193,16 @@ fn params_panel(state: &State) -> Element<'_, Message> {
     .spacing(10);
 
     section(
-        "Параметры генерации",
+        "Generation Parameters",
         column![sliders, toggles, controls].spacing(8).into(),
     )
 }
 
 fn results_panel(state: &State) -> Element<'_, Message> {
     let result_names: Vec<String> = (0..state.results.len())
-        .map(|i| format!("Результат {}", i + 1))
+        .map(|i| format!("Result {}", i + 1))
         .collect();
-    let selected = state.selected_result.map(|i| format!("Результат {}", i + 1));
+    let selected = state.selected_result.map(|i| format!("Result {}", i + 1));
     let selector = pick_list(result_names, selected, |choice| {
         let index = choice
             .rsplit(' ')
@@ -213,31 +212,31 @@ fn results_panel(state: &State) -> Element<'_, Message> {
             .unwrap_or(0);
         Message::SelectResult(index)
     })
-    .placeholder("Трек");
+    .placeholder("Track");
 
     let durations = if state.results.is_empty() {
-        "Нет результатов.".to_string()
+        "No results.".to_string()
     } else {
-        let mut lines = format!("Начальное значение: {}\n", state.seed_used);
+        let mut lines = format!("Seed: {}\n", state.seed_used);
         for (i, duration) in state.result_durations.iter().enumerate() {
-            lines.push_str(&format!("Результат {}: {}\n", i + 1, time_label(*duration)));
+            lines.push_str(&format!("Result {}: {}\n", i + 1, time_label(*duration)));
         }
         lines
     };
 
     let has_result = state.selected_result.is_some();
     let export = row![
-        maybe(button(text("Сохранить MIDI")), has_result, Message::SaveMidi),
-        maybe(button(text("Сохранить WAV")), has_result, Message::SaveWav),
-        button(text("Открыть папку")).on_press(Message::OpenOutputs),
-        button(text("Очистить кэш")).on_press(Message::ClearCache),
+        maybe(button(text("Save MIDI")), has_result, Message::SaveMidi),
+        maybe(button(text("Save WAV")), has_result, Message::SaveWav),
+        button(text("Open Folder")).on_press(Message::OpenOutputs),
+        button(text("Clear Cache")).on_press(Message::ClearCache),
     ]
     .spacing(8);
 
     section(
-        "Результаты",
+        "Results",
         column![
-            row![text("Трек для прослушивания и сохранения"), selector].spacing(10),
+            row![text("Track to play and save"), selector].spacing(10),
             text(durations),
             export,
             player_panel(state),
@@ -263,13 +262,13 @@ fn player_panel(state: &State) -> Element<'_, Message> {
 
     let seek = slider(0.0..=1.0, fraction, Message::Seek).step(0.001);
 
-    let play_label = if state.playing { "Пауза" } else { "Воспроизвести" };
+    let play_label = if state.playing { "Pause" } else { "Play" };
     let play_message = if state.playing { Message::Pause } else { Message::Play };
     let has_timeline = state.timeline.is_some();
 
     let controls = row![
         maybe(button(text(play_label)), has_timeline, play_message),
-        maybe(button(text("Стоп")), has_timeline, Message::StopPlayback),
+        maybe(button(text("Stop")), has_timeline, Message::StopPlayback),
         Space::with_width(Length::Fill),
         text(format!(
             "{} / {}",

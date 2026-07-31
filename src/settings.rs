@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-pub const AUTO_VALUE: &str = "Автоматически";
+pub const AUTO_VALUE: &str = "Auto";
 pub const TICKS_PER_QUARTER: i64 = 480;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,7 +36,7 @@ pub struct GenerationSettings {
 }
 
 fn default_drum_kit() -> String {
-    "Нет".to_string()
+    "None".to_string()
 }
 fn default_bpm() -> u16 {
     120

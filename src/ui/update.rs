@@ -20,15 +20,15 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
                 return Task::none();
             }
             state.model = ModelState::Loading;
-            state.status = "Загрузка модели в память…".to_string();
+            state.status = "Loading the model into memory…".to_string();
             return tasks::load_model();
         }
         Message::ModelLoaded(Ok(Hidden(model))) => {
             state.model = ModelState::Ready(model);
-            state.status = "Модель готова к генерации.".to_string();
+            state.status = "The model is ready to generate.".to_string();
         }
         Message::ModelLoaded(Err(error)) => {
-            state.status = format!("Ошибка загрузки модели: {error}");
+            state.status = format!("Failed to load the model: {error}");
             state.model = ModelState::Failed(error);
         }
 
@@ -43,7 +43,7 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
         Message::SelectPreset(name) => {
             if let Some(preset) = state.preset_store.get(&name) {
                 state.apply_settings(&preset.settings);
-                state.status = format!("Применён пресет «{name}».");
+                state.status = format!("Applied preset \"{name}\".");
             }
             state.selected_preset = Some(name);
         }
@@ -53,7 +53,7 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
             let name = state.new_preset_name.clone();
             match state.preset_store.save(&name, settings) {
                 Ok(()) => {
-                    state.status = "Пресет сохранён.".to_string();
+                    state.status = "Preset saved.".to_string();
                     state.new_preset_name.clear();
                 }
                 Err(error) => state.status = error.to_string(),
@@ -63,7 +63,7 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
             if let Some(name) = state.selected_preset.clone() {
                 match state.preset_store.delete(&name) {
                     Ok(()) => {
-                        state.status = "Пресет удалён.".to_string();
+                        state.status = "Preset deleted.".to_string();
                         state.selected_preset = None;
                     }
                     Err(error) => state.status = error.to_string(),
@@ -73,7 +73,7 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
 
         Message::Generate => {
             let Some(model) = state.model() else {
-                state.status = "Сначала загрузите модель.".to_string();
+                state.status = "Load the model first.".to_string();
                 return Task::none();
             };
             if state.generating {
@@ -82,13 +82,13 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
             stop_playback(state);
             state.generating = true;
             state.progress = 0.0;
-            state.status = "Потоковая генерация…".to_string();
+            state.status = "Generating…".to_string();
             let request = state.request();
             return tasks::generate_task(model, request, state.cancel.clone());
         }
         Message::CancelGeneration => {
             state.cancel.store(true, Ordering::Relaxed);
-            state.status = "Остановка после текущего события…".to_string();
+            state.status = "Stopping after the current event…".to_string();
         }
         Message::GenProgress(current, total) => {
             if total > 0 {
@@ -105,14 +105,14 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
                 .map(|track| track_duration(track))
                 .collect();
             state.results = output.tracks;
-            state.status = "Генерация завершена.".to_string();
+            state.status = "Generation complete.".to_string();
             if !state.results.is_empty() {
                 return update(state, Message::SelectResult(0));
             }
         }
         Message::GenFinished(Err(error)) => {
             state.generating = false;
-            state.status = format!("Ошибка генерации: {error}");
+            state.status = format!("Generation failed: {error}");
         }
 
         Message::SelectResult(index) => {
@@ -135,8 +135,8 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
 
         Message::SaveMidi => return save_selected(state, false),
         Message::SaveWav => return save_selected(state, true),
-        Message::Saved(Ok(path)) => state.status = format!("Сохранено: {path}"),
-        Message::Saved(Err(error)) => state.status = format!("Ошибка сохранения: {error}"),
+        Message::Saved(Ok(path)) => state.status = format!("Saved: {path}"),
+        Message::Saved(Err(error)) => state.status = format!("Save failed: {error}"),
         Message::OpenOutputs => {
             let dir = crate::paths::outputs_dir();
             std::fs::create_dir_all(&dir).ok();
@@ -198,12 +198,12 @@ fn play(state: &mut State) -> Task<Message> {
         return Task::none();
     }
     if state.player.is_none() {
-        state.status = "Подготовка звука…".to_string();
+        state.status = "Preparing audio…".to_string();
         let soundfont = crate::assets::soundfont();
         match PlaybackEngine::new(soundfont.as_ref()) {
             Ok(engine) => state.player = Some(engine),
             Err(error) => {
-                state.status = format!("Звук недоступен: {error}");
+                state.status = format!("Audio is unavailable: {error}");
                 return Task::none();
             }
         }
@@ -215,7 +215,7 @@ fn play(state: &mut State) -> Task<Message> {
         }
         player.play(state.position);
         state.playing = true;
-        state.status = "Воспроизведение…".to_string();
+        state.status = "Playing…".to_string();
     }
     Task::none()
 }
@@ -231,12 +231,12 @@ fn stop_playback(state: &mut State) {
 
 fn save_selected(state: &mut State, wav: bool) -> Task<Message> {
     let Some(index) = state.selected_result else {
-        state.status = "Нет выбранного результата.".to_string();
+        state.status = "No result is selected.".to_string();
         return Task::none();
     };
     let track = state.results[index].clone();
     let extension = if wav { "wav" } else { "mid" };
-    let default_name = format!("трек_{}.{extension}", index + 1);
+    let default_name = format!("track_{}.{extension}", index + 1);
     let dialog = rfd::FileDialog::new()
         .set_directory(state.app_settings.save_directory())
         .set_file_name(&default_name)
@@ -248,9 +248,9 @@ fn save_selected(state: &mut State, wav: bool) -> Task<Message> {
         state.app_settings.set_save_directory(parent.to_path_buf());
     }
     state.status = if wav {
-        "Сохранение WAV…".to_string()
+        "Saving WAV…".to_string()
     } else {
-        "Сохранение MIDI…".to_string()
+        "Saving MIDI…".to_string()
     };
 
     let target = Some(track.target_tick);
@@ -285,7 +285,7 @@ fn clear_cache(state: &mut State) {
     state.timeline = None;
     state.density.clear();
     state.duration = 0.0;
-    state.status = "Служебный кэш очищен.".to_string();
+    state.status = "Service cache cleared.".to_string();
 }
 
 fn track_duration(track: &crate::services::generation::GeneratedTrack) -> f64 {

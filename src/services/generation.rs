@@ -30,14 +30,14 @@ pub const KEY_SIGNATURES: [&str; 30] = [
 /// Drum-kit name -> program number (-1 means "no drums").
 pub fn drum_kit_program(name: &str) -> i32 {
     match name {
-        "Стандартная" => 0,
-        "Комнатная" => 8,
-        "Мощная" => 16,
-        "Электронная" => 24,
+        "Standard" => 0,
+        "Room" => 8,
+        "Power" => 16,
+        "Electronic" => 24,
         "TR-808" => 25,
-        "Джазовая" => 32,
-        "Мягкая" => 40,
-        "Оркестровая" => 48,
+        "Jazz" => 32,
+        "Brush" => 40,
+        "Orchestra" => 48,
         _ => -1,
     }
 }

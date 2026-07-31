@@ -16,15 +16,15 @@ use crate::settings::{AUTO_VALUE, GenerationRequest, GenerationSettings};
 use super::message::Tab;
 
 pub const DRUM_KITS: [&str; 9] = [
-    "Нет",
-    "Стандартная",
-    "Комнатная",
-    "Мощная",
-    "Электронная",
+    "None",
+    "Standard",
+    "Room",
+    "Power",
+    "Electronic",
     "TR-808",
-    "Джазовая",
-    "Мягкая",
-    "Оркестровая",
+    "Jazz",
+    "Brush",
+    "Orchestra",
 ];
 
 pub const TIME_SIGNATURES: [&str; 14] = [
@@ -96,9 +96,9 @@ impl State {
     pub fn new() -> Self {
         Self {
             model: ModelState::NotLoaded,
-            status: "Готово.".to_string(),
+            status: "Ready.".to_string(),
             instruments: vec![false; 128],
-            drum_kit: "Нет".to_string(),
+            drum_kit: "None".to_string(),
             time_signature: "4/4".to_string(),
             key_signature: AUTO_VALUE.to_string(),
             bpm: "120".to_string(),
@@ -218,7 +218,7 @@ impl State {
         let minutes = (seconds / 60.0) as u64;
         let secs = (seconds % 60.0) as u64;
         let events = settings.event_count();
-        format!("Целевая длина: {minutes} мин {secs:02} с; базовый резерв: {events} MIDI-событий")
+        format!("Target length: {minutes} min {secs:02} sec; base budget: {events} MIDI events")
     }
 }
 

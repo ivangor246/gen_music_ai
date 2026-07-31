@@ -1,5 +1,4 @@
 mod density_canvas;
-mod gm_names_ru;
 mod message;
 mod state;
 mod tasks;
@@ -23,7 +22,7 @@ fn subscription(state: &State) -> Subscription<Message> {
 
 pub fn run() -> iced::Result {
     crate::paths::ensure_runtime_directories();
-    iced::application("Генератор MIDI-треков", update::update, view::view)
+    iced::application("MIDI Track Generator", update::update, view::view)
         .subscription(subscription)
         .run_with(|| (State::new(), Task::none()))
 }

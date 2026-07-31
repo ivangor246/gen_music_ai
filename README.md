@@ -1,83 +1,84 @@
-# Генератор MIDI-треков
+# MIDI Track Generator
 
-Настольное приложение на **Rust** и фреймворке **Iced** для генерации музыки моделью
-MIDI Transformer. Работает **только на CPU**, без GPU-зависимостей. Инференс выполняется
-на [candle](https://github.com/huggingface/candle), синтез звука — на чистом Rust
-([oxisynth](https://crates.io/crates/oxisynth)). Веб-сервер и JavaScript не используются.
+A desktop application built with **Rust** and **Iced** that generates music with a MIDI
+Transformer model. It runs **entirely on the CPU** with no GPU dependencies. Inference is
+powered by [candle](https://github.com/huggingface/candle), while audio synthesis is implemented
+in pure Rust with [oxisynth](https://crates.io/crates/oxisynth). No web server or JavaScript is
+used.
 
-Модель (`midi-model-tv2o-medium`) и банк инструментов **встраиваются прямо в исполняемый
-файл**, поэтому итоговый бинарник самодостаточен — ничего скачивать или устанавливать не нужно.
+The model (`midi-model-tv2o-medium`) and instrument bank are **embedded directly into the
+executable**, making the final binary self-contained with no additional downloads or setup.
 
-## Сборка и запуск
+## Build and Run
 
-Требуется toolchain Rust (edition 2024, `rustc` 1.85+). Для живого воспроизведения нужна
-системная библиотека ALSA (`libasound`); генерация и экспорт MIDI/WAV от неё не зависят.
+Rust edition 2024 and `rustc` 1.85 or newer are required. Live playback also requires the ALSA
+system library (`libasound`); MIDI generation and MIDI/WAV export do not depend on it.
 
-Запуск из исходников (ассеты читаются из репозитория — быстрая пересборка):
+Run from source with repository assets for faster rebuilds:
 
 ```bash
 cargo run
 ```
 
-Сборка самодостаточного бинарника со встроенной моделью:
+Build a self-contained binary with the embedded model:
 
 ```bash
 cargo build --release --features embed
-# → target/release/midi-model  (~500 МБ, запускается из любого каталога)
+# -> target/release/midi-model  (~500 MB, runnable from any directory)
 ```
 
-Без флага `embed` модель и банк инструментов читаются из каталогов `models/` и `assets/`
-репозитория (удобно при разработке, не раздувает каждую сборку на сотни мегабайт).
+Without the `embed` feature, the model and instrument bank are loaded from the repository's
+`models/` and `assets/` directories. This is convenient during development and keeps rebuilds
+from producing a new binary hundreds of megabytes in size.
 
-## Возможности
+## Features
 
-- **Новая композиция**: выбор инструментов (до 15 из общего банка GM), ударной установки,
-  темпа, размера такта, тональности, длины в тактах и резерва событий на такт.
-- **Параметры генерации**: температура, порог вероятности (top-p), число вариантов (top-k),
-  количество результатов, начальное значение (seed), музыкальная память (контекстное окно).
-- **Пресеты**: 19 встроенных стилей плюс пользовательские (хранятся в файле `presets.json`).
-- **Прослушивание без сохранения**: выбранный результат воспроизводится напрямую, с перемоткой
-  по шкале и по кликабельной визуализации плотности нот.
-- **Экспорт**: явное сохранение выбранного трека кнопками «Сохранить MIDI» и «Сохранить WAV».
+- **New composition**: choose up to 15 instruments from the full GM bank, a drum kit, tempo,
+  time signature, key signature, length in bars, and an event budget per bar.
+- **Generation parameters**: temperature, probability threshold (top-p), number of candidates
+  (top-k), result count, seed, and musical memory (context window).
+- **Presets**: 19 built-in styles plus user-defined presets stored in `presets.json`.
+- **Playback without saving**: play the selected result directly, seek through the timeline,
+  and navigate with the interactive note-density visualization.
+- **Export**: explicitly save the selected track as MIDI or WAV.
 
-Результаты генерируются последовательно и секциями. Размер контекста ограничен настройкой
-«Музыкальная память», поэтому расход памяти не растёт вместе с длиной композиции. Веса
-загружаются из встроенного `safetensors` и один раз конвертируются `bf16 → f32` для быстрого
-счёта на CPU.
+Results are generated sequentially in sections. The context size is limited by the Musical
+Memory setting, so memory usage does not grow with composition length. Embedded `safetensors`
+weights are loaded and converted from `bf16` to `f32` once for efficient CPU computation.
 
-Полная история токенов записывается в служебный кэш компактными `int16`-файлами. После
-генерации музыкальные файлы автоматически не создаются — MIDI и WAV собираются потоково только
-после нажатия соответствующей кнопки, без загрузки всей композиции в память. Поэтому число
-событий не ограничено контекстным окном; практический предел определяется временем генерации,
-свободным местом на диске и ограничениями формата MIDI.
+The complete token history is stored in a service cache as compact `int16` files. Music files
+are not created automatically after generation: MIDI and WAV data are streamed only when the
+corresponding save action is selected, without loading the entire composition into memory.
+Therefore, the event count is not limited by the context window. Practical limits depend on
+generation time, available disk space, and the MIDI format.
 
-Кнопка «Очистить кэш» удаляет служебную историю. Явно сохранённые MIDI/WAV при этом не
-удаляются, но прослушать или продолжить очищенные результаты уже нельзя.
+Clearing the cache removes the service history but does not delete explicitly saved MIDI or WAV
+files. Cleared results can no longer be played or continued.
 
-Пользовательские данные (пресеты, настройки, кэш токенов) хранятся в стандартном каталоге
-пользователя (XDG), а не рядом с исполняемым файлом, — это позволяет запускать бинарник из
-каталога только для чтения.
+User data such as presets, settings, and the token cache is stored in the platform-standard XDG
+data directory rather than next to the executable. This allows the binary to run from a
+read-only directory.
 
-## Структура
+## Project Structure
 
-- `src/main.rs` — точка запуска;
-- `src/ui` — русский интерфейс на Iced (состояние, сообщения, панели, канвас плотности);
-- `src/services` — загрузка модели, генерация, экспорт MIDI/WAV, синтез, воспроизведение,
-  хранилище токенов, пресеты, настройки;
-- `src/core` — модель (dual-Llama на candle), токенизатор, сборка MIDI и синтез;
-- `src/assets.rs` — встраивание модели, конфигурации и банка инструментов;
-- `tests/` — интеграционные тесты и парити-проверки против эталонных значений.
+- `src/main.rs` — application entry point;
+- `src/ui` — Iced interface, state, messages, panels, and note-density canvas;
+- `src/services` — model loading, generation, MIDI/WAV export, synthesis, playback, token
+  storage, presets, and settings;
+- `src/core` — dual-Llama model, tokenizer, MIDI assembly, and synthesis;
+- `src/assets.rs` — embedded model, configuration, and instrument bank;
+- `tests/` — integration tests and parity checks against reference values.
 
-Целевая длина определяется числом тактов, темпом и размером такта. Генерация продолжается до
-соответствующей MIDI-позиции; при последующем экспорте MIDI и WAV завершаются на одной
-временной границе. Резерв событий защищает от бесконечной генерации, если модель перестаёт
-продвигать музыкальное время.
+The target length is determined by the number of bars, tempo, and time signature. Generation
+continues until the corresponding MIDI position is reached; subsequent MIDI and WAV exports end
+at the same time boundary. The event budget prevents unbounded generation if the model stops
+advancing musical time.
 
-## Тесты
+## Tests
 
 ```bash
 cargo test
 ```
 
-Проверки включают численное соответствие прямого прохода модели эталону, побайтовое совпадение
-экспортируемого MIDI, корректность таймлайна и плотности нот, а также сквозную генерацию.
+The test suite covers numerical parity of the model's forward pass, byte-for-byte MIDI export,
+timeline and note-density correctness, and end-to-end generation.
