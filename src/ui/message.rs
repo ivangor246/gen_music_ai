@@ -24,13 +24,6 @@ impl<T: Clone> Clone for Hidden<T> {
 }
 
 #[derive(Debug, Clone)]
-pub enum Tab {
-    NewComposition,
-    ContinueMidi,
-    ContinueResult,
-}
-
-#[derive(Debug, Clone)]
 pub enum Message {
     // Model
     LoadModel,
@@ -38,7 +31,6 @@ pub enum Message {
 
     // Form
     Form(FormMsg),
-    SelectTab(Tab),
     ToggleInstrument(usize),
 
     // Presets

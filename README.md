@@ -67,7 +67,7 @@ Therefore, the event count is not limited by the context window. Practical limit
 generation time, available disk space, and the MIDI format.
 
 Clearing the cache removes the service history but does not delete explicitly saved MIDI or WAV
-files. Cleared results can no longer be played or continued.
+files. Cleared results can no longer be played or exported.
 
 User data such as presets, settings, and the token cache is stored in the platform-standard XDG
 data directory rather than next to the executable. This allows the binary to run from a

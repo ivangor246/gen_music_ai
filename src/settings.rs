@@ -1,7 +1,5 @@
 //! Generation settings and request, mirroring the Python `settings.py`.
 
-use std::path::PathBuf;
-
 use serde::{Deserialize, Serialize};
 
 pub const AUTO_VALUE: &str = "Auto";
@@ -117,14 +115,6 @@ pub struct GenerationRequest {
     pub batch_size: usize,
     pub seed: u64,
     pub random_seed: bool,
-    pub source_midi: Option<Vec<u8>>,
-    pub source_event_count: usize,
-    pub reduce_control_changes: bool,
-    pub remap_track_channel: bool,
-    pub add_default_instrument: bool,
-    pub remove_empty_channels: bool,
-    pub continuation_paths: Option<Vec<PathBuf>>,
-    pub continuation_index: Option<usize>,
 }
 
 impl Default for GenerationRequest {
@@ -134,14 +124,6 @@ impl Default for GenerationRequest {
             batch_size: 4,
             seed: 0,
             random_seed: true,
-            source_midi: None,
-            source_event_count: 128,
-            reduce_control_changes: true,
-            remap_track_channel: true,
-            add_default_instrument: true,
-            remove_empty_channels: false,
-            continuation_paths: None,
-            continuation_index: None,
         }
     }
 }

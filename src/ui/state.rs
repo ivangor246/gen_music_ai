@@ -13,8 +13,6 @@ use crate::services::presets::PresetStore;
 use crate::services::timeline::Timeline;
 use crate::settings::{AUTO_VALUE, GenerationRequest, GenerationSettings};
 
-use super::message::Tab;
-
 pub const DRUM_KITS: [&str; 9] = [
     "None",
     "Standard",
@@ -61,7 +59,6 @@ pub struct State {
     pub seed: String,
     pub random_seed: bool,
     pub allow_cc: bool,
-    pub tab: Tab,
 
     // Presets
     pub preset_store: PresetStore,
@@ -112,7 +109,6 @@ impl State {
             seed: "0".to_string(),
             random_seed: true,
             allow_cc: true,
-            tab: Tab::NewComposition,
             preset_store: PresetStore::load(),
             selected_preset: None,
             new_preset_name: String::new(),

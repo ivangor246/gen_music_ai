@@ -12,14 +12,14 @@ use crate::services::generation::KEY_SIGNATURES;
 use crate::settings::AUTO_VALUE;
 
 use super::density_canvas::DensityCanvas;
-use super::message::{FormMsg, Message, Tab};
+use super::message::{FormMsg, Message};
 use super::state::{CONTEXT_WINDOWS, DRUM_KITS, ModelState, State, TIME_SIGNATURES};
 
 pub fn view(state: &State) -> Element<'_, Message> {
     let content = column![
         model_panel(state),
         presets_panel(state),
-        tabs_panel(state),
+        input_panel(state),
         params_panel(state),
         results_panel(state),
     ]
@@ -82,48 +82,11 @@ fn presets_panel(state: &State) -> Element<'_, Message> {
     )
 }
 
-fn tabs_panel(state: &State) -> Element<'_, Message> {
-    let tab_button = |label: &'static str, tab: Tab, active: bool| {
-        let b = button(text(label)).on_press(Message::SelectTab(tab));
-        if active {
-            b
-        } else {
-            b.style(button::secondary)
-        }
-    };
-    let bar = row![
-        tab_button(
-            "New Composition",
-            Tab::NewComposition,
-            matches!(state.tab, Tab::NewComposition)
-        ),
-        tab_button(
-            "Continue MIDI File",
-            Tab::ContinueMidi,
-            matches!(state.tab, Tab::ContinueMidi)
-        ),
-        tab_button(
-            "Continue Result",
-            Tab::ContinueResult,
-            matches!(state.tab, Tab::ContinueResult)
-        ),
-    ]
-    .spacing(6);
-
-    let body: Element<Message> = match state.tab {
-        Tab::NewComposition => composition_tab(state),
-        Tab::ContinueMidi => {
-            text("MIDI file continuation will be available in a future version.").into()
-        }
-        Tab::ContinueResult => {
-            text("Result continuation will be available in a future version.").into()
-        }
-    };
-
-    section("Input", column![bar, body].spacing(8).into())
+fn input_panel(state: &State) -> Element<'_, Message> {
+    section("Input", composition_form(state))
 }
 
-fn composition_tab(state: &State) -> Element<'_, Message> {
+fn composition_form(state: &State) -> Element<'_, Message> {
     let mut list = column![].spacing(2);
     for index in 0..PATCH_NAMES.len() {
         list = list.push(

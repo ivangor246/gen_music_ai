@@ -33,7 +33,6 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
         }
 
         Message::Form(form) => apply_form(state, form),
-        Message::SelectTab(tab) => state.tab = tab,
         Message::ToggleInstrument(index) => {
             if let Some(slot) = state.instruments.get_mut(index) {
                 *slot = !*slot;
