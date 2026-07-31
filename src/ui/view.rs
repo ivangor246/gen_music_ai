@@ -4,7 +4,7 @@ use iced::widget::{
     Space, button, checkbox, column, container, pick_list, progress_bar, row, scrollable, slider,
     text, text_input,
 };
-use iced::{Element, Length};
+use iced::{Alignment, Element, Length};
 
 use crate::services::generation::KEY_SIGNATURES;
 use crate::settings::AUTO_VALUE;
@@ -23,12 +23,14 @@ pub fn view(state: &State) -> Element<'_, Message> {
     let header: Element<'_, Message> = if wide {
         row![
             container(model_panel(state)).width(Length::FillPortion(2)),
-            container(presets_panel(state)).width(Length::FillPortion(3)),
+            container(presets_panel(state, wide)).width(Length::FillPortion(3)),
         ]
+        .align_y(Alignment::Center)
+        .height(Length::Shrink)
         .spacing(theme::SPACE_MD)
         .into()
     } else {
-        column![model_panel(state), presets_panel(state)]
+        column![model_panel(state), presets_panel(state, wide)]
             .spacing(theme::SPACE_MD)
             .into()
     };
@@ -46,9 +48,18 @@ pub fn view(state: &State) -> Element<'_, Message> {
 }
 
 fn section<'a>(title: &'a str, body: Element<'a, Message>) -> Element<'a, Message> {
+    sized_section(title, body, Length::Shrink)
+}
+
+fn sized_section<'a>(
+    title: &'a str,
+    body: Element<'a, Message>,
+    height: Length,
+) -> Element<'a, Message> {
     container(column![text(title).size(20), body].spacing(theme::SPACE_SM))
         .padding(theme::SPACE_MD)
         .width(Length::Fill)
+        .height(height)
         .style(theme::card)
         .into()
 }
@@ -73,7 +84,7 @@ fn model_panel(state: &State) -> Element<'_, Message> {
     } else {
         load
     };
-    section(
+    sized_section(
         "Model",
         column![
             row![
@@ -81,15 +92,17 @@ fn model_panel(state: &State) -> Element<'_, Message> {
                 Space::with_width(Length::Fill),
                 load,
             ]
+            .align_y(Alignment::Center)
             .spacing(theme::SPACE_SM),
             status,
         ]
         .spacing(theme::SPACE_SM)
         .into(),
+        Length::Shrink,
     )
 }
 
-fn presets_panel(state: &State) -> Element<'_, Message> {
+fn presets_panel(state: &State, wide: bool) -> Element<'_, Message> {
     let names: Vec<String> = state
         .preset_store
         .all()
@@ -98,11 +111,12 @@ fn presets_panel(state: &State) -> Element<'_, Message> {
         .collect();
     let picker = pick_list(names, state.selected_preset.clone(), Message::SelectPreset)
         .placeholder("Select a preset")
-        .style(theme::selection);
+        .style(theme::selection)
+        .width(Length::Fixed(130.0));
     let name_input = text_input("Preset name", &state.new_preset_name)
         .on_input(Message::PresetNameInput)
         .style(theme::input)
-        .width(Length::Fixed(200.0));
+        .width(Length::Fixed(145.0));
     let delete = button(text("×  Delete")).style(theme::danger_button);
     let delete = if state
         .selected_preset
@@ -113,7 +127,7 @@ fn presets_panel(state: &State) -> Element<'_, Message> {
     } else {
         delete
     };
-    section(
+    sized_section(
         "Presets",
         row![
             picker,
@@ -123,9 +137,11 @@ fn presets_panel(state: &State) -> Element<'_, Message> {
                 .style(theme::secondary_button),
             delete,
         ]
+        .align_y(Alignment::Center)
         .spacing(theme::SPACE_SM)
         .wrap()
         .into(),
+        if wide { Length::Fill } else { Length::Shrink },
     )
 }
 
@@ -142,6 +158,8 @@ fn composition_form(state: &State, wide: bool) -> Element<'_, Message> {
             container(instruments).width(Length::FillPortion(2)),
             container(controls).width(Length::FillPortion(3)),
         ]
+        .align_y(Alignment::Center)
+        .height(Length::Shrink)
         .spacing(theme::SPACE_MD)
         .into()
     } else {
@@ -174,6 +192,7 @@ fn track_controls(state: &State) -> Element<'_, Message> {
             Message::Form(FormMsg::KeySignature(v))
         }),
     ]
+    .align_y(Alignment::Center)
     .spacing(theme::SPACE_SM)
     .wrap();
 
@@ -188,6 +207,7 @@ fn track_controls(state: &State) -> Element<'_, Message> {
             Message::Form(FormMsg::EventsPerBar(v))
         }),
     ]
+    .align_y(Alignment::Center)
     .spacing(theme::SPACE_SM)
     .wrap();
 
@@ -234,6 +254,7 @@ fn params_panel(state: &State, wide: bool) -> Element<'_, Message> {
                 FormMsg::TopK(v)
             )),
         ]
+        .align_y(Alignment::Center)
         .spacing(theme::SPACE_SM)
         .wrap(),
     ]
@@ -247,6 +268,7 @@ fn params_panel(state: &State, wide: bool) -> Element<'_, Message> {
             )),
             number("Seed", &state.seed, |v| Message::Form(FormMsg::Seed(v))),
         ]
+        .align_y(Alignment::Center)
         .spacing(theme::SPACE_SM)
         .wrap(),
         row![
@@ -257,6 +279,7 @@ fn params_panel(state: &State, wide: bool) -> Element<'_, Message> {
                 .on_toggle(|v| Message::Form(FormMsg::AllowControlChanges(v)))
                 .style(theme::check),
         ]
+        .align_y(Alignment::Center)
         .spacing(theme::SPACE_SM)
         .wrap(),
         combo_owned(
@@ -282,6 +305,8 @@ fn params_panel(state: &State, wide: bool) -> Element<'_, Message> {
             sampling.width(Length::FillPortion(3)),
             output.width(Length::FillPortion(2)),
         ]
+        .align_y(Alignment::Center)
+        .height(Length::Shrink)
         .spacing(theme::SPACE_MD)
         .into()
     } else {
@@ -305,6 +330,7 @@ fn params_panel(state: &State, wide: bool) -> Element<'_, Message> {
                 .style(theme::progress)
                 .width(Length::Fill),
         ]
+        .align_y(Alignment::Center)
         .spacing(theme::SPACE_SM),
         status,
     ]
@@ -361,7 +387,8 @@ fn labeled_value<'a>(
             text(label).size(13),
             Space::with_width(Length::Fill),
             text(value).size(13)
-        ],
+        ]
+        .align_y(Alignment::Center),
         widget.into(),
     ]
     .spacing(theme::SPACE_XS)

@@ -1,7 +1,7 @@
 //! Searchable General MIDI instrument browser.
 
 use iced::widget::{button, checkbox, column, container, row, scrollable, text, text_input};
-use iced::{Element, Length};
+use iced::{Alignment, Element, Length};
 
 use crate::core::midi::gm::{PATCH_FAMILIES, PATCH_NAMES};
 
@@ -30,9 +30,12 @@ pub fn view(state: &State) -> Element<'_, Message> {
                 .size(12)
                 .style(iced::widget::text::secondary),
         ]
+        .align_y(Alignment::Center)
         .spacing(theme::SPACE_SM),
         selected_tags(state),
-        row![search, clear].spacing(theme::SPACE_SM),
+        row![search, clear]
+            .align_y(Alignment::Center)
+            .spacing(theme::SPACE_SM),
         scrollable(instrument_list(state, selected_count)).height(Length::Fixed(240.0)),
     ]
     .spacing(theme::SPACE_SM)
@@ -41,7 +44,7 @@ pub fn view(state: &State) -> Element<'_, Message> {
 }
 
 fn selected_tags(state: &State) -> Element<'_, Message> {
-    let mut tags = row![].spacing(theme::SPACE_XS);
+    let mut tags = row![].align_y(Alignment::Center).spacing(theme::SPACE_XS);
     let mut has_selection = false;
     for (index, selected) in state.instruments.iter().copied().enumerate() {
         if selected {

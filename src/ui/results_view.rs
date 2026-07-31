@@ -1,7 +1,7 @@
 //! Generated result cards, export actions, and playback controls.
 
 use iced::widget::{Space, button, canvas, column, container, row, slider, text};
-use iced::{Element, Length};
+use iced::{Alignment, Element, Length};
 
 use super::density_canvas::DensityCanvas;
 use super::message::Message;
@@ -23,7 +23,7 @@ pub fn view(state: &State) -> Element<'_, Message> {
 }
 
 fn result_cards(state: &State) -> Element<'_, Message> {
-    let mut cards = row![].spacing(theme::SPACE_SM);
+    let mut cards = row![].align_y(Alignment::Center).spacing(theme::SPACE_SM);
     for index in 0..state.results.len() {
         cards = cards.push(result_card(state, index));
     }
@@ -62,6 +62,7 @@ fn result_card(state: &State, index: usize) -> Element<'_, Message> {
             Space::with_width(Length::Fill),
             text(marker).size(11).style(marker_style),
         ]
+        .align_y(Alignment::Center)
         .spacing(theme::SPACE_SM),
         text(format!("Duration  {}", time_label(duration)))
             .size(13)
@@ -78,6 +79,7 @@ fn result_card(state: &State, index: usize) -> Element<'_, Message> {
                 .on_press(Message::SaveResultWav(index))
                 .style(theme::secondary_button),
         ]
+        .align_y(Alignment::Center)
         .spacing(theme::SPACE_XS),
     ]
     .spacing(theme::SPACE_SM);
@@ -121,6 +123,7 @@ fn result_toolbar(state: &State) -> Element<'_, Message> {
                     .on_press(Message::ConfirmCacheClear)
                     .style(theme::danger_button),
             ]
+            .align_y(Alignment::Center)
             .spacing(theme::SPACE_SM),
         )
         .padding(theme::SPACE_SM)
@@ -136,6 +139,7 @@ fn result_toolbar(state: &State) -> Element<'_, Message> {
                 .on_press_maybe((!state.generating).then_some(Message::RequestCacheClear))
                 .style(theme::danger_button),
         ]
+        .align_y(Alignment::Center)
         .spacing(theme::SPACE_SM)
         .into()
     }
@@ -185,6 +189,7 @@ fn player_panel(state: &State) -> Element<'_, Message> {
             time_label(state.duration)
         )),
     ]
+    .align_y(Alignment::Center)
     .spacing(theme::SPACE_SM);
 
     container(column![visualization, seek, controls].spacing(theme::SPACE_SM))
