@@ -1,4 +1,4 @@
-//! Byte-for-byte parity of the Rust SMF writer against the Python reference.
+//! Byte-for-byte parity of the SMF writer against the reference fixture.
 
 use gen_music_ai::core::midi::score::ActionStream;
 use gen_music_ai::core::midi::smf::write_midi;
@@ -22,7 +22,7 @@ fn rows() -> Vec<TokenRow> {
 }
 
 #[test]
-fn midi_bytes_match_python() {
+fn midi_bytes_match_reference() {
     let stream = ActionStream::new(rows().into_iter());
     let mut produced = Vec::new();
     write_midi(stream, Some(TARGET_TICK), &mut produced).unwrap();
@@ -31,6 +31,6 @@ fn midi_bytes_match_python() {
     let expected = std::fs::read(path).unwrap();
     assert_eq!(
         produced, expected,
-        "MIDI bytes differ from python reference"
+        "MIDI bytes differ from the reference fixture"
     );
 }

@@ -1,5 +1,4 @@
-//! Persistent app settings (just the last save directory), mirroring the Python
-//! `AppSettings`.
+//! Persistent application settings for the last save directory.
 
 use std::path::{Path, PathBuf};
 

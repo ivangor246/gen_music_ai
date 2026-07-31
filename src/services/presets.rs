@@ -1,4 +1,4 @@
-//! Built-in and user presets, mirroring the Python `PresetStore`.
+//! Built-in and user-defined generation presets.
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};

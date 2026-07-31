@@ -1,6 +1,6 @@
-//! Standard MIDI File writer, byte-compatible with the Python
-//! `StreamingMidiWriter`. Consumes timed actions, buffers one byte stream per
-//! track, pads every track to `target_tick`, and writes an SMF (division 480).
+//! Standard MIDI File writer with deterministic output. Consumes timed actions,
+//! buffers one byte stream per track, pads every track to `target_tick`, and
+//! writes an SMF with a division of 480 ticks per quarter note.
 
 use std::collections::BTreeMap;
 use std::io::{self, Write};

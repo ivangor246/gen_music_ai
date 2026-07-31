@@ -21,8 +21,7 @@ fn subscription(state: &State) -> Subscription<Message> {
 }
 
 pub fn run() -> iced::Result {
-    crate::paths::ensure_runtime_directories();
-    iced::application("MIDI Track Generator", update::update, view::view)
+    iced::application(env!("CARGO_PKG_NAME"), update::update, view::view)
         .subscription(subscription)
         .run_with(|| (State::new(), Task::none()))
 }

@@ -1,5 +1,4 @@
-//! The iced `view`: panels mirroring the Tkinter layout (CPU-only, so no
-//! execution-mode selector).
+//! The application view and its reusable panel helpers.
 
 use iced::widget::{
     Space, button, canvas, checkbox, column, container, pick_list, progress_bar, row, scrollable,

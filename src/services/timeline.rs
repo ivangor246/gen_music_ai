@@ -1,5 +1,5 @@
-//! Timeline in seconds for playback and the density visualization. Mirrors
-//! `iter_timed_actions` / `calculate_duration` and `PlaybackTimeline`.
+//! Timeline in seconds for playback and the density visualization, built
+//! directly from generated token rows.
 
 use crate::core::midi::score::{Action, ActionStream, TICKS_PER_QUARTER, TimedAction};
 use crate::core::tokenizer::codec::TokenRow;

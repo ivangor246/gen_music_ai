@@ -1,5 +1,4 @@
-//! Per-slot legal-id masks for constrained decoding, matching the mask logic in
-//! the Python generation loop.
+//! Per-slot legal-id masks for constrained decoding.
 
 use crate::core::tokenizer::events::{EVENT_ORDER, EventType, Field};
 use crate::core::tokenizer::vocab::{EOS_ID, PAD_ID, event_type_id, field_base, field_token};

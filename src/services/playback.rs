@@ -1,8 +1,7 @@
 //! Real-time playback engine: a cpal output stream renders the synth in its
 //! audio callback with sample-accurate MIDI scheduling. Seeking rebuilds synth
-//! state (patches, CCs, active notes) before resuming. Mirrors the behavior of
-//! the Python `FluidSynthPlayer` (without a separate wall-clock thread — timing
-//! is derived from the audio callback's sample count).
+//! state (patches, control changes, and active notes) before resuming. Timing is
+//! derived directly from the audio callback's sample count.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};

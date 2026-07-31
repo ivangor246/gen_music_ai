@@ -1,7 +1,6 @@
-//! Stream a generated track to a PCM WAV, rendering the exact number of frames
-//! per elapsed tick with a fractional-sample accumulator (drift-free). When a
-//! target tick is given the audio ends there (co-terminating with the MIDI);
-//! otherwise a one-second tail is appended. Mirrors `StreamingAudioWriter`.
+//! Stream a generated track to PCM WAV, using a fractional-sample accumulator
+//! to avoid timing drift. When a target tick is given, the audio ends with the
+//! MIDI; otherwise a one-second tail is appended.
 
 use std::io::Write;
 use std::path::Path;

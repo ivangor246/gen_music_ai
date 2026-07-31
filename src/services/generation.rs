@@ -1,6 +1,5 @@
-//! Headless generation: sliding-context sections, constrained per-slot sampling,
-//! stop conditions and cancellation. Mirrors the Python `GenerationService`
-//! (CPU path only; GPU/offload machinery is intentionally dropped).
+//! Headless CPU generation with sliding-context sections, constrained per-slot
+//! sampling, stop conditions, and cancellation.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};

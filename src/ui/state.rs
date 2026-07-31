@@ -97,9 +97,12 @@ pub struct State {
 
 impl State {
     pub fn new() -> Self {
+        let status = crate::paths::ensure_runtime_directories()
+            .map(|()| "Ready.".to_string())
+            .unwrap_or_else(|error| format!("Could not prepare application data: {error:#}"));
         Self {
             model: ModelState::NotLoaded,
-            status: "Ready.".to_string(),
+            status,
             instruments: vec![false; 128],
             drum_kit: "None".to_string(),
             time_signature: "4/4".to_string(),
@@ -223,7 +226,7 @@ impl State {
         })
     }
 
-    /// Apply a preset to the form (mirrors `_apply_preset`).
+    /// Apply a preset to the generation form.
     pub fn apply_settings(&mut self, settings: &GenerationSettings) {
         for slot in self.instruments.iter_mut() {
             *slot = false;
@@ -250,7 +253,7 @@ impl State {
         self.allow_cc = settings.allow_control_changes;
     }
 
-    /// Target length label (mirrors `_update_length`).
+    /// Build the target length and event-budget summary.
     pub fn length_label(&self) -> String {
         let Ok((bpm, bars, events_per_bar)) = self.composition_dimensions() else {
             return "Enter valid tempo, length, and event budget values.".to_string();

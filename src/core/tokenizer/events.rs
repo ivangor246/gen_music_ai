@@ -1,9 +1,8 @@
 //! Event and field definitions for tokenizer v2.
 //!
-//! This is the source of truth for the token layout. Enum declaration order is
-//! deliberately identical to the Python id-allocation order (the dict order in
-//! `MIDITokenizerV2.__init__`), so `vocab.rs` can derive id ranges from a
-//! variant's index.
+//! This is the source of truth for the token layout. Enum declaration order
+//! matches the checkpoint vocabulary, allowing `vocab.rs` to derive id ranges
+//! from a variant's index.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Field {
@@ -25,7 +24,7 @@ pub enum Field {
 }
 
 impl Field {
-    /// Number of distinct values (the id-range width), matching event_parameters.
+    /// Number of distinct values in the checkpoint's token range.
     pub const fn size(self) -> u32 {
         match self {
             Field::Time1 => 128,
@@ -47,7 +46,7 @@ impl Field {
     }
 }
 
-/// Fields in id-allocation order (event_parameters dict order in Python).
+/// Fields in checkpoint id-allocation order.
 pub const FIELD_ORDER: [Field; 15] = [
     Field::Time1,
     Field::Time2,
@@ -134,7 +133,7 @@ impl EventType {
     }
 }
 
-/// Event types in id-allocation order (events dict order in Python).
+/// Event types in checkpoint id-allocation order.
 pub const EVENT_ORDER: [EventType; 6] = [
     EventType::Note,
     EventType::PatchChange,

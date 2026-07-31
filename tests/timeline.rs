@@ -1,4 +1,4 @@
-//! Parity of the seconds timeline + note density against the Python reference.
+//! Timeline and note-density parity against the reference fixture.
 
 use serde::Deserialize;
 
@@ -31,7 +31,7 @@ fn rows() -> Vec<TokenRow> {
 }
 
 #[test]
-fn timeline_matches_python() {
+fn timeline_matches_reference() {
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/timeline.json");
     let fixture: Fixture = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
 

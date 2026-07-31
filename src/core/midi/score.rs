@@ -1,7 +1,6 @@
-//! Decode a token-row stream into timed MIDI actions, mirroring
-//! `streaming_output.iter_actions`. Notes emit an immediate note_on and a
-//! scheduled note_off (min-heap by tick), with re-triggered same-pitch notes
-//! closing the previous one first.
+//! Decode a token-row stream into timed MIDI actions. Notes emit an immediate
+//! note-on and a scheduled note-off, while retriggered notes of the same pitch
+//! close the previous note first.
 
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap, VecDeque};

@@ -1,6 +1,5 @@
-//! The dual-Llama MIDIModel: a base net over events, a token net that decodes
-//! an event's sub-tokens, and a shared lm_head. Mirrors `MIDIModel.forward` /
-//! `forward_token` in the Python model.
+//! The dual-Llama MIDI model: a base network over events, a token network that
+//! decodes each event's sub-tokens, and a shared language-model head.
 
 use candle_core::{DType, Device, Result, Tensor};
 use candle_nn::{Linear, Module, VarBuilder};

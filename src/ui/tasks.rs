@@ -1,6 +1,5 @@
-//! Background work bridged into iced `Task`s. Heavy work runs on std threads and
-//! reports back through a channel-backed stream (mirroring the Python thread +
-//! queue model).
+//! Background work bridged into iced `Task`s. Heavy work runs on standard
+//! threads and reports back through a channel-backed stream.
 
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;

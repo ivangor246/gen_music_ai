@@ -1,7 +1,6 @@
-//! Row <-> event codec for tokenizer v2, mirroring `event2tokens` /
-//! `tokens2event`. A "row" is `MAX_TOKEN_SEQ` token ids (stored as i16 in the
-//! cache); an `Event` is an event type plus its decoded field *values* in slot
-//! order.
+//! Row-to-event and event-to-row codec for tokenizer v2. A row contains
+//! `MAX_TOKEN_SEQ` token ids stored as `i16`; an event contains its type and
+//! decoded field values in slot order.
 
 use super::events::EventType;
 use super::vocab::{

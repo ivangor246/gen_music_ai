@@ -1,4 +1,4 @@
-//! Generation settings and request, mirroring the Python `settings.py`.
+//! Generation settings and request types.
 
 use serde::{Deserialize, Serialize};
 

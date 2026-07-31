@@ -1,5 +1,5 @@
-//! Atomic file write: write to a hidden temp file in the target directory, then
-//! rename over the destination. Mirrors the Python `TrackExporter`.
+//! Atomic file write: write to a hidden temporary file in the target directory,
+//! then rename it over the destination.
 
 use std::fs::File;
 use std::path::Path;

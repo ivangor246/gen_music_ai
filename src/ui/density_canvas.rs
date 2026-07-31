@@ -1,5 +1,4 @@
-//! Note-density visualization with click-to-seek, mirroring the Tkinter
-//! `TrackVisualization`.
+//! Note-density visualization with click-to-seek support.
 
 use iced::widget::canvas::{self, Event, Frame, Geometry, Path, Program, Stroke};
 use iced::{Color, Point, Rectangle, Renderer, Theme, mouse};

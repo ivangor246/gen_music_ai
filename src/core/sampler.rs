@@ -1,5 +1,4 @@
-//! Constrained token sampling, matching `MIDIModel.sample_top_p_k` and the
-//! per-slot masking in the Python generation loop.
+//! Constrained token sampling with per-slot masking.
 //!
 //! Order (must match the reference): softmax(logits / temp) over the full vocab
 //! -> multiply by the boolean legal-id mask (post-softmax) -> top-k -> top-p

@@ -1,7 +1,6 @@
-//! Append-only token cache: a flat little-endian i16 blob (row stride
-//! `MAX_TOKEN_SEQ`) plus a JSON sidecar. Tracks the musical timeline (end_tick)
-//! and the latest "setup" events used to prime each generation section. Mirrors
-//! the Python `TokenStore`.
+//! Append-only token cache: a flat little-endian i16 blob plus a JSON sidecar.
+//! Tracks the musical timeline and the latest setup events used to prime each
+//! generation section.
 
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -56,7 +55,7 @@ struct Sidecar {
     timeline: Timeline,
 }
 
-/// Latest setup events (tempo/time-sig/key-sig/patch/CC), keyed like Python.
+/// Latest setup events keyed by their musical role and channel.
 #[derive(Default)]
 struct MusicalState {
     events: Vec<(String, TokenRow)>,

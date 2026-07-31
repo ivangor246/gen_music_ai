@@ -1,9 +1,8 @@
 //! Token id layout for tokenizer v2, derived from the event/field definitions.
 //!
-//! Allocation order (Python `MIDITokenizerV2`): pad, bos, eos, then one id per
-//! event type in `EVENT_ORDER`, then contiguous ranges per field in
-//! `FIELD_ORDER`. All ids here are computed from those tables so they stay in
-//! sync with `events.rs`.
+//! Allocation order: pad, bos, eos, then one id per event type in `EVENT_ORDER`,
+//! followed by contiguous ranges per field in `FIELD_ORDER`. All ids are
+//! computed from those tables so they stay in sync with `events.rs`.
 
 use super::events::{EVENT_ORDER, EventType, FIELD_ORDER, Field};
 
@@ -66,7 +65,7 @@ mod tests {
     }
 
     #[test]
-    fn event_ids_match_python() {
+    fn event_ids_match_checkpoint_layout() {
         assert_eq!(event_type_id(EventType::Note), 3);
         assert_eq!(event_type_id(EventType::PatchChange), 4);
         assert_eq!(event_type_id(EventType::ControlChange), 5);
@@ -76,7 +75,7 @@ mod tests {
     }
 
     #[test]
-    fn field_ranges_match_python() {
+    fn field_ranges_match_checkpoint_layout() {
         // Representative bases/bounds from the documented v2 layout.
         assert_eq!(field_base(Field::Time1), 9);
         assert_eq!(field_base(Field::Time2), 137);
