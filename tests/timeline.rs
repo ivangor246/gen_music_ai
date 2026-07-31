@@ -2,10 +2,10 @@
 
 use serde::Deserialize;
 
-use midi_model::core::midi::score::Action;
-use midi_model::core::tokenizer::codec::{Event, TokenRow, event_to_tokens};
-use midi_model::core::tokenizer::events::EventType::*;
-use midi_model::services::timeline::Timeline;
+use gen_music_ai::core::midi::score::Action;
+use gen_music_ai::core::tokenizer::codec::{Event, TokenRow, event_to_tokens};
+use gen_music_ai::core::tokenizer::events::EventType::*;
+use gen_music_ai::services::timeline::Timeline;
 
 const TARGET_TICK: i64 = 2000;
 

@@ -1,3 +1,3 @@
 fn main() -> iced::Result {
-    midi_model::ui::run()
+    gen_music_ai::ui::run()
 }

@@ -2,10 +2,10 @@
 
 use std::io::Write;
 
-use midi_model::assets;
-use midi_model::core::tokenizer::codec::{Event, TokenRow, event_to_tokens};
-use midi_model::core::tokenizer::events::EventType::*;
-use midi_model::services::export_wav::save_wav;
+use gen_music_ai::assets;
+use gen_music_ai::core::tokenizer::codec::{Event, TokenRow, event_to_tokens};
+use gen_music_ai::core::tokenizer::events::EventType::*;
+use gen_music_ai::services::export_wav::save_wav;
 
 const TARGET_TICK: i64 = 2000;
 // 2000 ticks at 120 BPM (500000 us/quarter) -> 2.08333s at 44100 Hz.

@@ -4,14 +4,14 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use candle_core::Device;
 
-use midi_model::assets;
-use midi_model::core::model::config::ModelConfig;
-use midi_model::core::model::midi_model::MidiModel;
-use midi_model::core::tokenizer::codec::tokens_to_event;
-use midi_model::core::tokenizer::events::EventType;
-use midi_model::core::tokenizer::vocab::MAX_TOKEN_SEQ;
-use midi_model::services::generation::generate;
-use midi_model::settings::{GenerationRequest, GenerationSettings};
+use gen_music_ai::assets;
+use gen_music_ai::core::model::config::ModelConfig;
+use gen_music_ai::core::model::midi_model::MidiModel;
+use gen_music_ai::core::tokenizer::codec::tokens_to_event;
+use gen_music_ai::core::tokenizer::events::EventType;
+use gen_music_ai::core::tokenizer::vocab::MAX_TOKEN_SEQ;
+use gen_music_ai::services::generation::generate;
+use gen_music_ai::settings::{GenerationRequest, GenerationSettings};
 
 #[test]
 fn generates_valid_tokens() {

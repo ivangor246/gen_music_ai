@@ -6,11 +6,11 @@ use std::time::Instant;
 
 use candle_core::Device;
 
-use midi_model::assets;
-use midi_model::core::model::config::ModelConfig;
-use midi_model::core::model::midi_model::MidiModel;
-use midi_model::services::generation::generate;
-use midi_model::settings::{GenerationRequest, GenerationSettings};
+use gen_music_ai::assets;
+use gen_music_ai::core::model::config::ModelConfig;
+use gen_music_ai::core::model::midi_model::MidiModel;
+use gen_music_ai::services::generation::generate;
+use gen_music_ai::settings::{GenerationRequest, GenerationSettings};
 
 #[test]
 #[ignore]

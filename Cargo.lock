@@ -1474,6 +1474,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "gen_music_ai"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "candle-core",
+ "candle-nn",
+ "cpal",
+ "directories",
+ "half",
+ "hound",
+ "iced",
+ "oxisynth",
+ "rand 0.8.7",
+ "rand_chacha 0.3.1",
+ "rfd",
+ "safetensors 0.4.5",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2236,28 +2258,6 @@ dependencies = [
  "log",
  "objc",
  "paste",
-]
-
-[[package]]
-name = "midi-model"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "candle-core",
- "candle-nn",
- "cpal",
- "directories",
- "half",
- "hound",
- "iced",
- "oxisynth",
- "rand 0.8.7",
- "rand_chacha 0.3.1",
- "rfd",
- "safetensors 0.4.5",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
 ]
 
 [[package]]

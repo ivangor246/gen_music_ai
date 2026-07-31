@@ -24,7 +24,7 @@ Build a self-contained binary with the embedded model:
 
 ```bash
 cargo build --release --features embed
-# -> target/release/midi-model  (~500 MB, runnable from any directory)
+# -> target/release/gen_music_ai  (~500 MB, runnable from any directory)
 ```
 
 Without the `embed` feature, the model and instrument bank are loaded from the repository's

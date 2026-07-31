@@ -1,9 +1,9 @@
 //! Byte-for-byte parity of the Rust SMF writer against the Python reference.
 
-use midi_model::core::midi::score::ActionStream;
-use midi_model::core::midi::smf::write_midi;
-use midi_model::core::tokenizer::codec::{Event, TokenRow, event_to_tokens};
-use midi_model::core::tokenizer::events::EventType::*;
+use gen_music_ai::core::midi::score::ActionStream;
+use gen_music_ai::core::midi::smf::write_midi;
+use gen_music_ai::core::tokenizer::codec::{Event, TokenRow, event_to_tokens};
+use gen_music_ai::core::tokenizer::events::EventType::*;
 
 const TARGET_TICK: i64 = 2000;
 
