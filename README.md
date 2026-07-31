@@ -1,123 +1,150 @@
-# MIDI Track Generator
+# gen_music_ai
 
-A desktop application built with **Rust** and **Iced** that generates music with a MIDI
-Transformer model. It runs **entirely on the CPU** with no GPU dependencies. Inference is
-powered by [candle](https://github.com/huggingface/candle), while audio synthesis is implemented
-in pure Rust with [oxisynth](https://crates.io/crates/oxisynth). No web server or JavaScript is
-used.
+`gen_music_ai` is a desktop application for generating multi-instrument music and exporting it
+as Standard MIDI or WAV. It runs the
+[SkyTNT MIDI Transformer](https://github.com/SkyTNT/midi-model) locally on the CPU and provides
+an [Iced](https://github.com/iced-rs/iced) interface for configuring, generating, previewing,
+and saving tracks.
 
-Release builds can embed the model (`midi-model-tv2o-medium`) and instrument bank directly into
-the executable, making the distributed binary self-contained.
+The application does not send prompts or generated music to a remote service. A GPU is not
+required or currently supported.
 
-## Build and Run
+## Features
 
-Rust edition 2024, `rustc` 1.85 or newer, `curl`, and either `sha256sum` or `shasum` are required.
-Live playback also requires the ALSA system library (`libasound`); MIDI generation and MIDI/WAV
-export do not depend on it.
+- Generate tracks with up to 15 selected General MIDI instruments, or let the model choose.
+- Configure drum kit, tempo, time signature, key signature, length, and event budget.
+- Tune temperature, top-p, top-k, result count, seed, control changes, and musical memory.
+- Start from built-in style presets or save and delete custom presets.
+- Generate several candidates with reproducible seeds and cancel an active generation.
+- Preview a selected result with playback, seeking, and a note-density timeline.
+- Export only the selected result as `.mid` or as 44.1 kHz, 16-bit stereo `.wav`.
+- Keep long compositions in a disk-backed token cache instead of retaining their complete token
+  history in memory.
 
-Download the pinned runtime assets after cloning the repository. The script downloads only the
-468 MB safetensors checkpoint and the 51 MB SoundFont, verifies their SHA-256 checksums, and
-skips files that are already valid:
+## Requirements
+
+- Rust 1.85 or newer (the project uses Rust edition 2024).
+- `curl` and either `sha256sum` or `shasum` for downloading runtime assets.
+- Approximately 520 MB of disk space for the model checkpoint and SoundFont, in addition to
+  build artifacts.
+- An audio output device for live playback.
+
+On Debian and Ubuntu, install the ALSA development files required by `cpal`:
+
+```bash
+sudo apt install pkg-config libasound2-dev
+```
+
+Model loading and generation require substantially more memory than the checkpoint size because
+the model weights are converted to `f32` for CPU inference. Larger result counts and musical
+memory settings increase peak memory use. Generation speed depends on the CPU and selected
+settings.
+
+## Run from Source
+
+Download the pinned model checkpoint and SoundFont after cloning the repository:
 
 ```bash
 bash scripts/download-assets.sh
 ```
 
-The download URLs are pinned to specific revisions of
-[SkyTNT's model checkpoint](https://huggingface.co/skytnt/midi-model-tv2o-medium/tree/0f8f265d4330f4e46527ac2313200254c5757f5f)
-and the [upstream SoundFont file](https://huggingface.co/skytnt/midi-model/blob/1b01fa36e954cd5c3981119754675e8f88c99ab4/soundfont.sf2).
+The script verifies SHA-256 checksums and skips files that are already present and valid. It
+downloads:
 
-Run from source with the downloaded assets:
+- [`midi-model-tv2o-medium`](https://huggingface.co/skytnt/midi-model-tv2o-medium/tree/0f8f265d4330f4e46527ac2313200254c5757f5f)
+  to `models/midi-model-tv2o-medium/model.safetensors`;
+- the pinned [SoundFont](https://huggingface.co/skytnt/midi-model/blob/1b01fa36e954cd5c3981119754675e8f88c99ab4/soundfont.sf2)
+  to `assets/soundfont.sf2`.
 
-```bash
-cargo run
-```
-
-Build a self-contained binary with the embedded model:
+Run the application using the committed dependency lockfile:
 
 ```bash
-cargo build --release --features embed
-# -> target/release/gen_music_ai  (~500 MB, runnable from any directory)
+cargo run --locked
 ```
 
-Without the `embed` feature, the model and instrument bank are loaded at runtime from the
-repository's `models/` and `assets/` directories. This is convenient during development and
-keeps rebuilds from producing a new binary hundreds of megabytes in size. Both release and
-development builds use the same files installed by `scripts/download-assets.sh`.
+In the application:
 
-## Features
+1. Select **Load Model** and wait until the model is ready.
+2. Choose a preset or configure the instruments and generation parameters.
+3. Select **Generate**.
+4. Choose a result, preview it, and save it as MIDI or WAV.
 
-- **New composition**: choose up to 15 instruments from the full GM bank, a drum kit, tempo,
-  time signature, key signature, length in bars, and an event budget per bar.
-- **Generation parameters**: temperature, probability threshold (top-p), number of candidates
-  (top-k), result count, seed, and musical memory (context window).
-- **Presets**: 19 built-in styles plus user-defined presets stored in `presets.json`.
-- **Playback without saving**: play the selected result directly, seek through the timeline,
-  and navigate with the interactive note-density visualization.
-- **Export**: explicitly save the selected track as MIDI or WAV.
+## Release Build
 
-Results are generated sequentially in sections. The context size is limited by the Musical
-Memory setting, so memory usage does not grow with composition length. Embedded `safetensors`
-weights are loaded and converted from `bf16` to `f32` once for efficient CPU computation.
+The default build reads the checkpoint and SoundFont from their repository paths at runtime.
+This keeps development builds smaller and avoids embedding the assets after every code change:
 
-The complete token history is stored in a service cache as compact `int16` files. Music files
-are not created automatically after generation: MIDI and WAV data are streamed only when the
-corresponding save action is selected, without loading the entire composition into memory.
-Therefore, the event count is not limited by the context window. Practical limits depend on
-generation time, available disk space, and the MIDI format.
+```bash
+cargo build --release --locked
+```
 
-Clearing the cache removes the service history but does not delete explicitly saved MIDI or WAV
-files. Cleared results can no longer be played or exported.
+Use the `embed` feature to include both runtime assets in the executable:
 
-User data such as presets, settings, and the token cache is stored in the platform-standard XDG
-data directory rather than next to the executable. This allows the binary to run from a
-read-only directory.
+```bash
+cargo build --release --locked --features embed
+```
 
-## Project Structure
+The embedded build does not require separate model or SoundFont files at runtime, but it is
+larger and still depends on the operating system's supported audio and graphics facilities.
+The assets are required before running the default build or compiling with the `embed` feature.
 
-- `src/main.rs` — application entry point;
-- `src/ui` — Iced interface, state, messages, panels, and note-density canvas;
-- `src/services` — model loading, generation, MIDI/WAV export, synthesis, playback, token
-  storage, presets, and settings;
-- `src/core` — dual-Llama model, tokenizer, MIDI assembly, and synthesis;
-- `src/assets.rs` — embedded model, configuration, and instrument bank;
-- `tests/` — integration tests and parity checks against reference values.
+## User Data and Exports
 
-The target length is determined by the number of bars, tempo, and time signature. Generation
-continues until the corresponding MIDI position is reached; subsequent MIDI and WAV exports end
-at the same time boundary. The event budget prevents unbounded generation if the model stops
-advancing musical time.
+Presets, the last save directory, and generated token caches are stored in the
+platform-specific application data directory selected by the
+[`directories`](https://crates.io/crates/directories) crate. They are not written next to the
+executable.
+
+MIDI and WAV files are created only after an explicit save action. The save dialog starts in the
+system Downloads directory and remembers the last selected directory. Clearing the application
+cache removes generated token histories and makes those unsaved results unavailable; it does not
+delete previously exported files.
 
 ## Tests
 
-The default test suite does not load the model weights or soundfont:
+The default suite covers unit tests and lightweight MIDI/timeline integration tests without
+loading the model checkpoint or SoundFont:
 
 ```bash
-cargo test
+cargo test --locked
 ```
 
-Run model parity, end-to-end generation, and WAV export explicitly when the required assets and
-enough memory are available:
+Model parity, end-to-end generation, and WAV rendering are opt-in because they require the
+downloaded assets and significantly more time and memory:
 
 ```bash
-cargo test --features heavy-tests -- --test-threads=1
+cargo test --locked --features heavy-tests -- --test-threads=1
 ```
 
-The generation benchmark is ignored by default and can be started separately:
+The generation benchmark is ignored by default and can be run separately:
 
 ```bash
-cargo test --release --features heavy-tests --test bench_gen -- --ignored --nocapture
+cargo test --release --locked --features heavy-tests --test bench_gen -- --ignored --nocapture
 ```
 
-Together, the light and heavy suites cover numerical parity of the model's forward pass,
-byte-for-byte MIDI export, timeline and note-density correctness, WAV rendering, and end-to-end
-generation.
+Check formatting with:
+
+```bash
+cargo fmt --all -- --check
+```
+
+## Project Structure
+
+- `src/core/` — model implementation, sampling constraints, tokenizer, and MIDI encoding.
+- `src/services/` — generation, token storage, playback, synthesis, export, presets, and settings.
+- `src/ui/` — Iced application state, messages, tasks, views, and timeline visualization.
+- `models/` — tracked model configuration and the downloaded checkpoint location.
+- `assets/` — downloaded SoundFont location.
+- `scripts/` — reproducible runtime asset download and checksum verification.
+- `tests/` — lightweight tests, opt-in model tests, fixtures, and the generation benchmark.
 
 ## License
 
 Except where otherwise noted, the source code in this repository is licensed under the
 [Apache License 2.0](LICENSE).
 
-The model checkpoint, SoundFont, and third-party Rust dependencies retain their respective
-licenses and are not relicensed by this project. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
-for details.
+This project is based in part on the Apache-2.0-licensed
+[SkyTNT MIDI model](https://github.com/SkyTNT/midi-model). The model checkpoint, SoundFont, and
+Rust dependencies retain their own licenses and are not relicensed by this project. See
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) before redistributing source code, assets, or
+compiled binaries.
