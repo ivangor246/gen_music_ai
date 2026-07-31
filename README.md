@@ -132,7 +132,8 @@ cargo fmt --all -- --check
 - `src/ui/` — Iced application state, messages, tasks, views, and timeline visualization.
 - `models/` — tracked model configuration and the downloaded checkpoint location.
 - `assets/` — downloaded SoundFont location.
-- `scripts/` — reproducible runtime asset download and checksum verification.
+- `licenses/` — complete license and attribution texts for bundled third-party components.
+- `scripts/` — reproducible asset and third-party source downloads with checksum verification.
 - `tests/` — lightweight tests, opt-in model tests, fixtures, and the generation benchmark.
 
 ## License
@@ -144,4 +145,5 @@ This project is based in part on the Apache-2.0-licensed
 [SkyTNT MIDI model](https://github.com/SkyTNT/midi-model). The model checkpoint, SoundFont, and
 Rust dependencies retain their own licenses and are not relicensed by this project. See
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) before redistributing source code, assets, or
-compiled binaries.
+compiled binaries. Binary distributors must also follow the OxiSynth source and relinking
+requirements in [RELINKING.md](RELINKING.md).
