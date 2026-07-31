@@ -37,6 +37,9 @@ the model weights are converted to `f32` for CPU inference. Larger result counts
 memory settings increase peak memory use. Generation speed depends on the CPU and selected
 settings.
 
+To prevent accidental runaway jobs, the interface limits a request to 256 bars, 128 base events
+per bar, 30 minutes of estimated playback, and 8,192 base events across all requested results.
+
 ## Run from Source
 
 Download the pinned model checkpoint and SoundFont after cloning the repository:

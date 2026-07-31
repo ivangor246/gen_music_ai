@@ -15,6 +15,10 @@ use crate::settings::{AUTO_VALUE, GenerationRequest, GenerationSettings};
 
 pub const MAX_INSTRUMENTS: usize = 15;
 const MAX_BPM: u16 = 383;
+const MAX_BARS: u32 = 256;
+const MAX_EVENTS_PER_BAR: u32 = 128;
+const MAX_ESTIMATED_SECONDS: f64 = 30.0 * 60.0;
+const MAX_TOTAL_EVENT_BUDGET: u64 = 8_192;
 const MAX_RESULTS: usize = 4;
 const MAX_TOP_K: usize = crate::core::tokenizer::vocab::VOCAB_SIZE as usize;
 
@@ -195,7 +199,7 @@ impl State {
         }
         let top_k = parse_in_range("Top-k Candidates", &self.top_k, 1, MAX_TOP_K)?;
 
-        Ok(GenerationSettings {
+        let settings = GenerationSettings {
             instruments: self.selected_instruments(),
             drum_kit: self.drum_kit.clone(),
             bpm,
@@ -208,7 +212,9 @@ impl State {
             top_p: self.top_p,
             top_k,
             allow_control_changes: self.allow_cc,
-        })
+        };
+        validate_duration(&settings)?;
+        Ok(settings)
     }
 
     pub fn request(&self) -> Result<GenerationRequest, String> {
@@ -217,9 +223,12 @@ impl State {
         } else {
             parse_number("Seed", &self.seed)?
         };
+        let settings = self.settings()?;
+        let batch_size = parse_in_range("Result Count", &self.batch, 1, MAX_RESULTS)?;
+        validate_event_budget(&settings, batch_size)?;
         Ok(GenerationRequest {
-            settings: self.settings()?,
-            batch_size: parse_in_range("Result Count", &self.batch, 1, MAX_RESULTS)?,
+            settings,
+            batch_size,
             seed,
             random_seed: self.random_seed,
             ..GenerationRequest::default()
@@ -255,8 +264,9 @@ impl State {
 
     /// Build the target length and event-budget summary.
     pub fn length_label(&self) -> String {
-        let Ok((bpm, bars, events_per_bar)) = self.composition_dimensions() else {
-            return "Enter valid tempo, length, and event budget values.".to_string();
+        let (bpm, bars, events_per_bar) = match self.composition_dimensions() {
+            Ok(dimensions) => dimensions,
+            Err(error) => return error,
         };
         let settings = GenerationSettings {
             bpm,
@@ -265,6 +275,9 @@ impl State {
             time_signature: self.time_signature.clone(),
             ..GenerationSettings::default()
         };
+        if let Err(error) = validate_duration(&settings) {
+            return error;
+        }
         let seconds = settings.estimated_seconds();
         let minutes = (seconds / 60.0) as u64;
         let secs = (seconds % 60.0) as u64;
@@ -274,18 +287,32 @@ impl State {
 
     fn composition_dimensions(&self) -> Result<(u16, u32, u32), String> {
         let bpm = parse_in_range("Tempo", &self.bpm, 1, MAX_BPM)?;
-        let bars = parse_in_range("Length", &self.bars, 1, u32::MAX)?;
-        let events_per_bar =
-            parse_in_range("Event Budget per Bar", &self.events_per_bar, 1, u32::MAX)?;
-        let event_budget_is_valid = bars
-            .checked_mul(events_per_bar)
-            .and_then(|events| events.checked_mul(16))
-            .is_some();
-        if !event_budget_is_valid || bars.checked_mul(128).is_none() {
-            return Err("Length and event budget are too large.".to_string());
-        }
+        let bars = parse_in_range("Length", &self.bars, 1, MAX_BARS)?;
+        let events_per_bar = parse_in_range(
+            "Event Budget per Bar",
+            &self.events_per_bar,
+            1,
+            MAX_EVENTS_PER_BAR,
+        )?;
         Ok((bpm, bars, events_per_bar))
     }
+}
+
+fn validate_duration(settings: &GenerationSettings) -> Result<(), String> {
+    if settings.estimated_seconds() > MAX_ESTIMATED_SECONDS {
+        return Err("Estimated duration must not exceed 30 minutes.".to_string());
+    }
+    Ok(())
+}
+
+fn validate_event_budget(settings: &GenerationSettings, batch_size: usize) -> Result<(), String> {
+    let total = u64::from(settings.event_count()) * batch_size as u64;
+    if total > MAX_TOTAL_EVENT_BUDGET {
+        return Err(format!(
+            "Total event budget across all results must not exceed {MAX_TOTAL_EVENT_BUDGET}."
+        ));
+    }
+    Ok(())
 }
 
 fn parse_number<T>(label: &str, text: &str) -> Result<T, String>
@@ -318,5 +345,23 @@ mod tests {
         assert!(parse_in_range("Result Count", "0", 1usize, 4).is_err());
         assert!(parse_in_range("Result Count", "5", 1usize, 4).is_err());
         assert_eq!(parse_in_range("Result Count", "4", 1usize, 4), Ok(4));
+    }
+
+    #[test]
+    fn workload_validation_rejects_excessive_duration_and_event_budget() {
+        let long = GenerationSettings {
+            bpm: 1,
+            bars: 16,
+            ..GenerationSettings::default()
+        };
+        assert!(validate_duration(&long).is_err());
+
+        let dense = GenerationSettings {
+            bars: MAX_BARS,
+            events_per_bar: MAX_EVENTS_PER_BAR,
+            ..GenerationSettings::default()
+        };
+        assert!(validate_event_budget(&dense, MAX_RESULTS).is_err());
+        assert!(validate_event_budget(&GenerationSettings::default(), MAX_RESULTS).is_ok());
     }
 }

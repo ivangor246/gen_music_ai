@@ -47,7 +47,7 @@ pub enum Message {
 
     // Results / export
     SelectResult(usize),
-    TimelineReady(Hidden<Timeline>),
+    TimelineReady(usize, Result<Hidden<Timeline>, String>),
     SaveMidi,
     SaveWav,
     Saved(Result<String, String>),

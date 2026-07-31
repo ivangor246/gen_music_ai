@@ -101,6 +101,11 @@ pub struct PlaybackEngine {
     _stream: cpal::Stream,
 }
 
+pub struct PlaybackSnapshot {
+    pub position: f64,
+    pub playing: bool,
+}
+
 impl PlaybackEngine {
     pub fn new(soundfont: &[u8]) -> Result<Self> {
         let synth = OxiSynth::new(soundfont, SAMPLE_RATE)?;
@@ -141,8 +146,8 @@ impl PlaybackEngine {
     }
 
     /// Load a timeline (in seconds) as a sample-accurate schedule.
-    pub fn set_track(&self, timeline: &Timeline) {
-        let mut guard = self.shared.lock().unwrap();
+    pub fn set_track(&self, timeline: &Timeline) -> Result<()> {
+        let mut guard = self.lock_shared()?;
         guard.schedule = timeline
             .events
             .iter()
@@ -157,37 +162,45 @@ impl PlaybackEngine {
         guard.sample_pos = 0;
         guard.playing = false;
         guard.synth.reset();
+        Ok(())
     }
 
-    pub fn play(&self, position_seconds: f64) {
-        let mut guard = self.shared.lock().unwrap();
+    pub fn play(&self, position_seconds: f64) -> Result<()> {
+        let mut guard = self.lock_shared()?;
         let sample = (position_seconds.max(0.0) * SAMPLE_RATE as f64).round() as usize;
         guard.restore_state(sample);
         guard.playing = true;
+        Ok(())
     }
 
-    pub fn pause(&self) {
-        let mut guard = self.shared.lock().unwrap();
+    pub fn pause(&self) -> Result<()> {
+        let mut guard = self.lock_shared()?;
         guard.playing = false;
         guard.synth.reset();
+        Ok(())
     }
 
-    pub fn stop(&self) {
-        let mut guard = self.shared.lock().unwrap();
+    pub fn stop(&self) -> Result<()> {
+        let mut guard = self.lock_shared()?;
         guard.playing = false;
         guard.sample_pos = 0;
         guard.cursor = 0;
         guard.synth.reset();
+        Ok(())
     }
 
-    /// Current playback position in seconds.
-    pub fn position(&self) -> f64 {
-        let guard = self.shared.lock().unwrap();
-        guard.sample_pos as f64 / SAMPLE_RATE as f64
+    pub fn snapshot(&self) -> Result<PlaybackSnapshot> {
+        let guard = self.lock_shared()?;
+        Ok(PlaybackSnapshot {
+            position: guard.sample_pos as f64 / SAMPLE_RATE as f64,
+            playing: guard.playing,
+        })
     }
 
-    pub fn is_playing(&self) -> bool {
-        self.shared.lock().unwrap().playing
+    fn lock_shared(&self) -> Result<std::sync::MutexGuard<'_, Shared>> {
+        self.shared
+            .lock()
+            .map_err(|_| anyhow!("audio playback state is unavailable"))
     }
 }
 

@@ -118,15 +118,27 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
             state.generating = false;
             state.progress = 1.0;
             state.seed_used = output.seed;
-            state.result_durations = output
+            state.selected_result = None;
+            clear_timeline(state);
+            let durations = output
                 .tracks
                 .iter()
-                .map(|track| track_duration(track))
-                .collect();
+                .map(track_duration)
+                .collect::<Result<Vec<_>, _>>();
             state.results = output.tracks;
-            state.status = "Generation complete.".to_string();
-            if !state.results.is_empty() {
-                return update(state, Message::SelectResult(0));
+            match durations {
+                Ok(durations) => {
+                    state.result_durations = durations;
+                    state.status = "Generation complete.".to_string();
+                    if !state.results.is_empty() {
+                        return update(state, Message::SelectResult(0));
+                    }
+                }
+                Err(error) => {
+                    state.result_durations.clear();
+                    state.status =
+                        format!("Generation complete, but results are unavailable: {error}");
+                }
             }
         }
         Message::GenFinished(Err(error)) => {
@@ -140,16 +152,27 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
             }
             stop_playback(state);
             state.selected_result = Some(index);
-            state.timeline = None;
-            return tasks::build_timeline(state.results[index].clone());
+            clear_timeline(state);
+            return tasks::build_timeline(index, state.results[index].clone());
         }
-        Message::TimelineReady(Hidden(timeline)) => {
-            state.density = timeline.note_density(120);
-            state.duration = timeline.duration;
-            state.position = 0.0;
-            state.playing = false;
-            state.timeline = Some(timeline);
-            state.density_cache.clear();
+        Message::TimelineReady(index, result) => {
+            if state.selected_result != Some(index) {
+                return Task::none();
+            }
+            match result {
+                Ok(Hidden(timeline)) => {
+                    state.density = timeline.note_density(120);
+                    state.duration = timeline.duration;
+                    state.position = 0.0;
+                    state.playing = false;
+                    state.timeline = Some(timeline);
+                    state.density_cache.clear();
+                }
+                Err(error) => {
+                    clear_timeline(state);
+                    state.status = error;
+                }
+            }
         }
 
         Message::SaveMidi => return save_selected(state, false),
@@ -181,25 +204,38 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
 
         Message::Play => return play(state),
         Message::Pause => {
-            if let Some(player) = &state.player {
-                player.pause();
+            let result = state.player.as_ref().map(PlaybackEngine::pause);
+            if let Some(Err(error)) = result {
+                reset_playback(state, error);
+            } else {
+                state.playing = false;
             }
-            state.playing = false;
         }
         Message::StopPlayback => stop_playback(state),
         Message::Seek(fraction) => {
             state.position = (fraction as f64 * state.duration).clamp(0.0, state.duration);
             if state.playing {
-                if let Some(player) = &state.player {
-                    player.play(state.position);
+                let result = state
+                    .player
+                    .as_ref()
+                    .map(|player| player.play(state.position));
+                if let Some(Err(error)) = result {
+                    reset_playback(state, error);
                 }
             }
         }
         Message::Tick => {
             if state.playing {
-                if let Some(player) = &state.player {
-                    state.position = player.position();
-                    if !player.is_playing() {
+                let snapshot = state.player.as_ref().map(PlaybackEngine::snapshot);
+                match snapshot {
+                    Some(Ok(snapshot)) => {
+                        state.position = snapshot.position;
+                        if !snapshot.playing {
+                            state.playing = false;
+                        }
+                    }
+                    Some(Err(error)) => reset_playback(state, error),
+                    None => {
                         state.playing = false;
                     }
                 }
@@ -255,24 +291,47 @@ fn play(state: &mut State) -> Task<Message> {
             }
         }
     }
+    if state.position >= state.duration {
+        state.position = 0.0;
+    }
     if let (Some(player), Some(timeline)) = (&state.player, &state.timeline) {
-        player.set_track(timeline);
-        if state.position >= state.duration {
-            state.position = 0.0;
+        match player
+            .set_track(timeline)
+            .and_then(|()| player.play(state.position))
+        {
+            Ok(()) => {
+                state.playing = true;
+                state.status = "Playing…".to_string();
+            }
+            Err(error) => reset_playback(state, error),
         }
-        player.play(state.position);
-        state.playing = true;
-        state.status = "Playing…".to_string();
     }
     Task::none()
 }
 
 fn stop_playback(state: &mut State) {
-    if let Some(player) = &state.player {
-        player.stop();
+    let error = state.player.as_ref().and_then(|player| player.stop().err());
+    if let Some(error) = error {
+        reset_playback(state, error);
+    } else {
+        state.playing = false;
     }
-    state.playing = false;
     state.position = 0.0;
+    state.density_cache.clear();
+}
+
+fn reset_playback(state: &mut State, error: anyhow::Error) {
+    state.player = None;
+    state.playing = false;
+    state.status = format!("Audio playback was reset: {error}");
+}
+
+fn clear_timeline(state: &mut State) {
+    state.timeline = None;
+    state.density.clear();
+    state.duration = 0.0;
+    state.position = 0.0;
+    state.playing = false;
     state.density_cache.clear();
 }
 
@@ -281,7 +340,11 @@ fn save_selected(state: &mut State, wav: bool) -> Task<Message> {
         state.status = "No result is selected.".to_string();
         return Task::none();
     };
-    let track = state.results[index].clone();
+    let Some(track) = state.results.get(index).cloned() else {
+        state.selected_result = None;
+        state.status = "The selected result is no longer available.".to_string();
+        return Task::none();
+    };
     let extension = if wav { "wav" } else { "mid" };
     let default_name = format!("track_{}.{extension}", index + 1);
     let dialog = rfd::FileDialog::new()
@@ -324,19 +387,17 @@ fn clear_cache(state: &mut State) {
     state.results.clear();
     state.result_durations.clear();
     state.selected_result = None;
-    state.timeline = None;
-    state.density.clear();
-    state.duration = 0.0;
+    clear_timeline(state);
     state.status = match result {
         Ok(removed) => format!("Service cache cleared ({removed} files removed)."),
         Err(error) => format!("Could not completely clear the service cache: {error:#}"),
     };
 }
 
-fn track_duration(track: &crate::services::generation::GeneratedTrack) -> f64 {
+fn track_duration(track: &crate::services::generation::GeneratedTrack) -> Result<f64, String> {
     crate::services::token_store::read_rows(&track.token_path)
         .map(|rows| Timeline::build(rows.into_iter(), Some(track.target_tick)).duration)
-        .unwrap_or(0.0)
+        .map_err(|error| format!("{}: {error:#}", track.token_path.display()))
 }
 
 fn open_path(path: &std::path::Path) -> std::io::Result<()> {

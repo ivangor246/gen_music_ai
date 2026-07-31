@@ -82,21 +82,20 @@ pub fn generate_task(
 }
 
 /// Build the playback timeline for a generated track off-thread.
-pub fn build_timeline(track: crate::services::generation::GeneratedTrack) -> Task<Message> {
+pub fn build_timeline(
+    index: usize,
+    track: crate::services::generation::GeneratedTrack,
+) -> Task<Message> {
     run_once(move || {
-        let result = crate::services::token_store::read_rows(&track.token_path)
+        let timeline = crate::services::token_store::read_rows(&track.token_path)
             .map(|rows| {
                 crate::services::timeline::Timeline::build(
                     rows.into_iter(),
                     Some(track.target_tick),
                 )
             })
-            .map(Hidden);
-        match result {
-            Ok(timeline) => Message::TimelineReady(timeline),
-            Err(_) => {
-                Message::TimelineReady(Hidden(crate::services::timeline::Timeline::default()))
-            }
-        }
+            .map(Hidden)
+            .map_err(|error| format!("Could not prepare the selected result: {error:#}"));
+        Message::TimelineReady(index, timeline)
     })
 }
