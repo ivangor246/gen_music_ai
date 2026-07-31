@@ -25,6 +25,8 @@ impl<T: Clone> Clone for Hidden<T> {
 
 #[derive(Debug, Clone)]
 pub enum Message {
+    WindowResized(f32),
+
     // Model
     LoadModel,
     ModelLoaded(Result<Hidden<Arc<MidiModel>>, String>),

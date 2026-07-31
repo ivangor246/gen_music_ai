@@ -16,23 +16,39 @@ use super::state::{
     CONTEXT_WINDOWS, DRUM_KITS, MAX_INSTRUMENTS, ModelState, State, TIME_SIGNATURES,
 };
 
+const WIDE_LAYOUT_THRESHOLD: f32 = 960.0;
+const COMBO_WIDTH: f32 = 175.0;
+
 pub fn view(state: &State) -> Element<'_, Message> {
+    let wide = state.viewport_width >= WIDE_LAYOUT_THRESHOLD;
+    let header: Element<'_, Message> = if wide {
+        row![
+            container(model_panel(state)).width(Length::FillPortion(2)),
+            container(presets_panel(state)).width(Length::FillPortion(3)),
+        ]
+        .spacing(8)
+        .into()
+    } else {
+        column![model_panel(state), presets_panel(state)]
+            .spacing(8)
+            .into()
+    };
     let content = column![
-        model_panel(state),
-        presets_panel(state),
-        input_panel(state),
-        params_panel(state),
+        header,
+        input_panel(state, wide),
+        params_panel(state, wide),
         results_panel(state),
     ]
-    .spacing(10)
-    .padding(12);
+    .spacing(8)
+    .padding(10)
+    .width(Length::Fill);
 
-    scrollable(content).into()
+    scrollable(content).width(Length::Fill).into()
 }
 
 fn section<'a>(title: &'a str, body: Element<'a, Message>) -> Element<'a, Message> {
-    container(column![text(title).size(18), body].spacing(8))
-        .padding(10)
+    container(column![text(title).size(18), body].spacing(6))
+        .padding(8)
         .width(Length::Fill)
         .into()
 }
@@ -54,7 +70,7 @@ fn model_panel(state: &State) -> Element<'_, Message> {
         "Model",
         column![
             row![
-                text("General-purpose MIDI model (tv2o-medium)"),
+                text("MIDI model (tv2o-medium)"),
                 Space::with_width(Length::Fill),
                 load,
             ]
@@ -102,11 +118,27 @@ fn presets_panel(state: &State) -> Element<'_, Message> {
     )
 }
 
-fn input_panel(state: &State) -> Element<'_, Message> {
-    section("Input", composition_form(state))
+fn input_panel(state: &State, wide: bool) -> Element<'_, Message> {
+    section("Track", composition_form(state, wide))
 }
 
-fn composition_form(state: &State) -> Element<'_, Message> {
+fn composition_form(state: &State, wide: bool) -> Element<'_, Message> {
+    let instruments = instrument_selector(state);
+    let controls = track_controls(state);
+
+    if wide {
+        row![
+            container(instruments).width(Length::FillPortion(2)),
+            container(controls).width(Length::FillPortion(3)),
+        ]
+        .spacing(12)
+        .into()
+    } else {
+        column![instruments, controls].spacing(10).into()
+    }
+}
+
+fn instrument_selector(state: &State) -> Element<'_, Message> {
     let selected_count = state.selected_instrument_count();
     let mut list = column![].spacing(2);
     for index in 0..PATCH_NAMES.len() {
@@ -118,26 +150,26 @@ fn composition_form(state: &State) -> Element<'_, Message> {
         };
         list = list.push(instrument);
     }
-    let instruments = column![
+    column![
         text(format!(
             "Instruments ({selected_count}/{MAX_INSTRUMENTS}; empty lets the model choose)"
         )),
-        scrollable(list).height(Length::Fixed(220.0)),
+        scrollable(list).height(Length::Fixed(200.0)),
     ]
     .spacing(4)
-    .width(Length::FillPortion(1));
+    .width(Length::Fill)
+    .into()
+}
 
+fn track_controls(state: &State) -> Element<'_, Message> {
     let key_options: Vec<String> = std::iter::once(AUTO_VALUE.to_string())
         .chain(KEY_SIGNATURES.iter().map(|s| s.to_string()))
         .collect();
 
-    let controls = column![
+    let musical = row![
         combo("Drum Kit", DRUM_KITS.to_vec(), &state.drum_kit, |v| {
             Message::Form(FormMsg::DrumKit(v))
         }),
-        number("Tempo (BPM)", &state.bpm, |v| Message::Form(FormMsg::Bpm(
-            v
-        ))),
         combo(
             "Time Signature",
             TIME_SIGNATURES.to_vec(),
@@ -147,54 +179,82 @@ fn composition_form(state: &State) -> Element<'_, Message> {
         combo_owned("Key Signature", key_options, &state.key_signature, |v| {
             Message::Form(FormMsg::KeySignature(v))
         }),
+    ]
+    .spacing(10)
+    .wrap();
+
+    let dimensions = row![
+        number("Tempo (BPM)", &state.bpm, |v| Message::Form(FormMsg::Bpm(
+            v
+        ))),
         number("Length (bars)", &state.bars, |v| Message::Form(
             FormMsg::Bars(v)
         )),
         number("Event Budget per Bar", &state.events_per_bar, |v| {
             Message::Form(FormMsg::EventsPerBar(v))
         }),
+    ]
+    .spacing(10)
+    .wrap();
+
+    column![
+        text("Track Settings").size(15),
+        musical,
+        dimensions,
         text(state.length_label()),
     ]
     .spacing(6)
-    .width(Length::FillPortion(1));
-
-    row![instruments, controls].spacing(14).wrap().into()
+    .width(Length::Fill)
+    .into()
 }
 
-fn params_panel(state: &State) -> Element<'_, Message> {
-    let sliders = row![
-        labeled_value(
-            "Temperature",
-            format!("{:.2}", state.temperature),
-            slider(0.1..=1.2, state.temperature, |v| Message::Form(
-                FormMsg::Temperature(v)
-            ))
-            .step(0.01)
-            .width(Length::Fixed(160.0)),
-        ),
-        labeled_value(
-            "Probability Threshold",
-            format!("{:.2}", state.top_p),
-            slider(0.1..=1.0, state.top_p, |v| Message::Form(FormMsg::TopP(v)))
+fn params_panel(state: &State, wide: bool) -> Element<'_, Message> {
+    let sampling = column![
+        text("Sampling").size(15),
+        row![
+            labeled_value(
+                "Temperature",
+                format!("{:.2}", state.temperature),
+                slider(0.1..=1.2, state.temperature, |v| Message::Form(
+                    FormMsg::Temperature(v)
+                ))
                 .step(0.01)
                 .width(Length::Fixed(160.0)),
-        ),
-        number("Top-k Candidates", &state.top_k, |v| Message::Form(
-            FormMsg::TopK(v)
-        )),
-        number("Result Count", &state.batch, |v| Message::Form(
-            FormMsg::Batch(v)
-        )),
-        number("Seed", &state.seed, |v| Message::Form(FormMsg::Seed(v))),
+            ),
+            labeled_value(
+                "Probability Threshold",
+                format!("{:.2}", state.top_p),
+                slider(0.1..=1.0, state.top_p, |v| Message::Form(FormMsg::TopP(v)))
+                    .step(0.01)
+                    .width(Length::Fixed(160.0)),
+            ),
+            number("Top-k Candidates", &state.top_k, |v| Message::Form(
+                FormMsg::TopK(v)
+            )),
+        ]
+        .spacing(12)
+        .wrap(),
     ]
-    .spacing(12)
-    .wrap();
+    .spacing(6);
 
-    let toggles = row![
-        checkbox("Random Seed", state.random_seed)
-            .on_toggle(|v| Message::Form(FormMsg::RandomSeed(v))),
-        checkbox("Allow MIDI Control Changes", state.allow_cc)
-            .on_toggle(|v| Message::Form(FormMsg::AllowControlChanges(v))),
+    let output = column![
+        text("Results and Memory").size(15),
+        row![
+            number("Result Count", &state.batch, |v| Message::Form(
+                FormMsg::Batch(v)
+            )),
+            number("Seed", &state.seed, |v| Message::Form(FormMsg::Seed(v))),
+        ]
+        .spacing(12)
+        .wrap(),
+        row![
+            checkbox("Random Seed", state.random_seed)
+                .on_toggle(|v| Message::Form(FormMsg::RandomSeed(v))),
+            checkbox("Allow MIDI Control Changes", state.allow_cc)
+                .on_toggle(|v| Message::Form(FormMsg::AllowControlChanges(v))),
+        ]
+        .spacing(12)
+        .wrap(),
         combo_owned(
             "Musical Memory",
             CONTEXT_WINDOWS.iter().map(|s| s.to_string()).collect(),
@@ -202,8 +262,18 @@ fn params_panel(state: &State) -> Element<'_, Message> {
             |v| Message::Form(FormMsg::ContextWindow(v)),
         ),
     ]
-    .spacing(12)
-    .wrap();
+    .spacing(6);
+
+    let settings: Element<'_, Message> = if wide {
+        row![
+            container(sampling).width(Length::FillPortion(3)),
+            container(output).width(Length::FillPortion(2)),
+        ]
+        .spacing(12)
+        .into()
+    } else {
+        column![sampling, output].spacing(10).into()
+    };
 
     let generate = if state.generating {
         button(text("Stop")).on_press(Message::CancelGeneration)
@@ -220,10 +290,7 @@ fn params_panel(state: &State) -> Element<'_, Message> {
     ]
     .spacing(6);
 
-    section(
-        "Generation Parameters",
-        column![sliders, toggles, controls].spacing(8).into(),
-    )
+    section("Generation", column![settings, controls].spacing(8).into())
 }
 
 fn results_panel(state: &State) -> Element<'_, Message> {
@@ -327,8 +394,7 @@ fn player_panel(state: &State) -> Element<'_, Message> {
             time_label(state.duration)
         )),
     ]
-    .spacing(8)
-    .wrap();
+    .spacing(8);
 
     container(column![visualization, seek, controls].spacing(6))
         .padding(8)
@@ -396,7 +462,7 @@ fn combo_owned<'a>(
 ) -> Element<'a, Message> {
     labeled(
         label,
-        pick_list(options, Some(selected.to_string()), on_select).width(Length::Fixed(200.0)),
+        pick_list(options, Some(selected.to_string()), on_select).width(Length::Fixed(COMBO_WIDTH)),
     )
 }
 

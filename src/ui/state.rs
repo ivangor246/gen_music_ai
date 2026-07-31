@@ -49,6 +49,7 @@ pub enum ModelState {
 }
 
 pub struct State {
+    pub viewport_width: f32,
     pub model: ModelState,
     pub status: String,
 
@@ -105,6 +106,7 @@ impl State {
             .map(|()| "Ready.".to_string())
             .unwrap_or_else(|error| format!("Could not prepare application data: {error:#}"));
         Self {
+            viewport_width: super::INITIAL_WINDOW_WIDTH,
             model: ModelState::NotLoaded,
             status,
             instruments: vec![false; 128],

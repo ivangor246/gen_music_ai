@@ -15,13 +15,16 @@ use state::State;
 const APP_ID: &str = "io.github.ivangor246.gen_music_ai";
 const APP_TITLE: &str = "Gen Music AI";
 const ICON_SIZE: u32 = 128;
+pub(super) const INITIAL_WINDOW_WIDTH: f32 = 1_100.0;
 
 fn subscription(state: &State) -> Subscription<Message> {
-    if state.playing {
+    let playback = if state.playing {
         iced::time::every(Duration::from_millis(50)).map(|_| Message::Tick)
     } else {
         Subscription::none()
-    }
+    };
+    let resize = window::resize_events().map(|(_, size)| Message::WindowResized(size.width));
+    Subscription::batch([playback, resize])
 }
 
 pub fn run() -> iced::Result {
@@ -32,8 +35,8 @@ pub fn run() -> iced::Result {
             ..iced::Settings::default()
         })
         .window(window::Settings {
-            size: Size::new(1_100.0, 800.0),
-            min_size: Some(Size::new(720.0, 600.0)),
+            size: Size::new(INITIAL_WINDOW_WIDTH, 800.0),
+            min_size: Some(Size::new(640.0, 600.0)),
             icon: window_icon(),
             ..window::Settings::default()
         })

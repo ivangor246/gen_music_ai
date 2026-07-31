@@ -15,6 +15,8 @@ use super::tasks;
 
 pub fn update(state: &mut State, message: Message) -> Task<Message> {
     match message {
+        Message::WindowResized(width) => state.viewport_width = width,
+
         Message::LoadModel => {
             if matches!(&state.model, ModelState::Loading | ModelState::Ready(_)) {
                 return Task::none();
