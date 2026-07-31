@@ -1,13 +1,10 @@
 # gen_music_ai
 
-`gen_music_ai` is a desktop application for generating multi-instrument music and exporting it
-as Standard MIDI or WAV. It runs the
-[SkyTNT MIDI Transformer](https://github.com/SkyTNT/midi-model) locally on the CPU and provides
-an [Iced](https://github.com/iced-rs/iced) interface for configuring, generating, previewing,
-and saving tracks.
+`gen_music_ai` is a desktop application for generating multi-instrument music locally. Configure
+instruments and generation parameters, preview the results, and export selected tracks as
+Standard MIDI or WAV.
 
-The application does not send prompts or generated music to a remote service. A GPU is not
-required or currently supported.
+Generation runs entirely on the CPU and does not require a GPU or a remote inference service.
 
 ## Features
 
