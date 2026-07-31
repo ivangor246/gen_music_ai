@@ -293,7 +293,7 @@ fn sample_event_batch(
         }
         if slot > 0
             && (0..batch).all(|item| {
-                ended[item] || kinds[item].map_or(true, |kind| slot >= kind.fields().len())
+                ended[item] || kinds[item].is_none_or(|kind| slot >= kind.fields().len())
             })
         {
             break;
@@ -341,16 +341,15 @@ fn build_initial_prompt(settings: &GenerationSettings) -> (Vec<TokenRow>, Vec<u1
         EventType::TimeSignature,
         vec![0, 0, 0, (numerator - 1) as u16, denominator_code - 1],
     ));
-    if settings.key_signature != AUTO_VALUE {
-        if let Some(index) = KEY_SIGNATURES
+    if settings.key_signature != AUTO_VALUE
+        && let Some(index) = KEY_SIGNATURES
             .iter()
             .position(|&k| k == settings.key_signature)
-        {
-            events.push(Event::new(
-                EventType::KeySignature,
-                vec![0, 0, 0, (index / 2) as u16, (index % 2) as u16],
-            ));
-        }
+    {
+        events.push(Event::new(
+            EventType::KeySignature,
+            vec![0, 0, 0, (index / 2) as u16, (index % 2) as u16],
+        ));
     }
     events.push(Event::new(EventType::SetTempo, vec![0, 0, 0, settings.bpm]));
 

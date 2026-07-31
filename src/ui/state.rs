@@ -235,7 +235,6 @@ impl State {
             batch_size,
             seed,
             random_seed: self.random_seed,
-            ..GenerationRequest::default()
         })
     }
 

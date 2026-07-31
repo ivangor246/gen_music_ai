@@ -23,10 +23,10 @@ pub fn write_midi(
     let mut global_tick = 0i64;
 
     for timed in actions {
-        if let Some(limit) = target_tick {
-            if timed.tick > limit {
-                break;
-            }
+        if let Some(limit) = target_tick
+            && timed.tick > limit
+        {
+            break;
         }
         let tick = global_tick.max(timed.tick);
         global_tick = tick;

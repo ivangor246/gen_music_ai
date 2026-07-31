@@ -31,7 +31,6 @@ fn generates_valid_tokens() {
         batch_size: 1,
         random_seed: false,
         seed: 42,
-        ..GenerationRequest::default()
     };
 
     // Cancel after a bounded number of events to keep the test fast on CPU.
@@ -57,10 +56,10 @@ fn generates_valid_tokens() {
             .chunks_exact(2)
             .map(|b| i16::from_le_bytes([b[0], b[1]]))
             .collect();
-        if let Some(event) = tokens_to_event(&row) {
-            if event.kind == EventType::Note {
-                saw_note = true;
-            }
+        if let Some(event) = tokens_to_event(&row)
+            && event.kind == EventType::Note
+        {
+            saw_note = true;
         }
     }
     assert!(saw_note, "generation should yield at least one note");

@@ -69,14 +69,14 @@ impl Program<Message> for DensityCanvas<'_> {
         bounds: Rectangle,
         cursor: mouse::Cursor,
     ) -> (canvas::event::Status, Option<Message>) {
-        if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) = event {
-            if let Some(position) = cursor.position_in(bounds) {
-                let fraction = (position.x / bounds.width).clamp(0.0, 1.0);
-                return (
-                    canvas::event::Status::Captured,
-                    Some(Message::Seek(fraction)),
-                );
-            }
+        if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) = event
+            && let Some(position) = cursor.position_in(bounds)
+        {
+            let fraction = (position.x / bounds.width).clamp(0.0, 1.0);
+            return (
+                canvas::event::Status::Captured,
+                Some(Message::Seek(fraction)),
+            );
         }
         (canvas::event::Status::Ignored, None)
     }

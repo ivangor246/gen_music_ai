@@ -33,15 +33,15 @@ pub fn settings_file() -> PathBuf {
 
 /// Default directory offered for manual saves (~/Downloads, else home).
 pub fn default_downloads_dir() -> PathBuf {
-    if let Some(dirs) = UserDirs::new() {
-        if let Some(downloads) = dirs.download_dir() {
-            if downloads.is_dir() {
-                return downloads.to_path_buf();
-            }
-        }
-        return dirs.home_dir().to_path_buf();
+    let Some(dirs) = UserDirs::new() else {
+        return data_dir();
+    };
+    if let Some(downloads) = dirs.download_dir()
+        && downloads.is_dir()
+    {
+        return downloads.to_path_buf();
     }
-    data_dir()
+    dirs.home_dir().to_path_buf()
 }
 
 pub fn ensure_runtime_directories() -> Result<()> {

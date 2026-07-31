@@ -26,10 +26,10 @@ impl Timeline {
         let mut seconds = 0.0f64;
 
         for TimedAction { tick, action, .. } in ActionStream::new(rows) {
-            if let Some(limit) = target_tick {
-                if tick > limit {
-                    break;
-                }
+            if let Some(limit) = target_tick
+                && tick > limit
+            {
+                break;
             }
             let tick = current_tick.max(tick);
             seconds += ticks_to_seconds(tick - current_tick, current_tempo);
@@ -43,10 +43,10 @@ impl Timeline {
         }
 
         let mut duration = seconds;
-        if let Some(limit) = target_tick {
-            if limit > current_tick {
-                duration += ticks_to_seconds(limit - current_tick, current_tempo);
-            }
+        if let Some(limit) = target_tick
+            && limit > current_tick
+        {
+            duration += ticks_to_seconds(limit - current_tick, current_tempo);
         }
         Self { events, duration }
     }

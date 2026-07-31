@@ -51,10 +51,10 @@ fn render<W: Write + std::io::Seek>(
     let mut scratch: Vec<i16> = Vec::new();
 
     for TimedAction { tick, action, .. } in ActionStream::new(rows.iter().copied()) {
-        if let Some(limit) = target_tick {
-            if tick > limit {
-                break;
-            }
+        if let Some(limit) = target_tick
+            && tick > limit
+        {
+            break;
         }
         let elapsed = (tick - current_tick).max(0);
         let exact = frames_for_ticks(elapsed, current_tempo) + fractional;

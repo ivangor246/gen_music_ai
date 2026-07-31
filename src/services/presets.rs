@@ -19,39 +19,41 @@ struct StoredPreset {
     settings: GenerationSettings,
 }
 
-fn builtin(
-    name: &str,
-    instruments: &[&str],
-    drum_kit: &str,
-    bpm: u16,
-    time_signature: &str,
-    bars: u32,
-    events_per_bar: u32,
-    temperature: f32,
-    top_p: f32,
-    top_k: usize,
-) -> Preset {
-    Preset {
-        name: name.to_string(),
-        settings: GenerationSettings {
-            instruments: instruments.iter().map(|s| s.to_string()).collect(),
-            drum_kit: drum_kit.to_string(),
-            bpm,
-            time_signature: time_signature.to_string(),
-            bars,
-            events_per_bar,
-            temperature,
-            top_p,
-            top_k,
-            ..GenerationSettings::default()
-        },
-        built_in: true,
-    }
+macro_rules! builtin_preset {
+    (
+        $name:expr,
+        $instruments:expr,
+        $drum_kit:expr,
+        $bpm:expr,
+        $time_signature:expr,
+        $bars:expr,
+        $events_per_bar:expr,
+        $temperature:expr,
+        $top_p:expr,
+        $top_k:expr $(,)?
+    ) => {
+        Preset {
+            name: $name.to_string(),
+            settings: GenerationSettings {
+                instruments: $instruments.iter().map(|name| name.to_string()).collect(),
+                drum_kit: $drum_kit.to_string(),
+                bpm: $bpm,
+                time_signature: $time_signature.to_string(),
+                bars: $bars,
+                events_per_bar: $events_per_bar,
+                temperature: $temperature,
+                top_p: $top_p,
+                top_k: $top_k,
+                ..GenerationSettings::default()
+            },
+            built_in: true,
+        }
+    };
 }
 
 fn default_presets() -> Vec<Preset> {
     vec![
-        builtin(
+        builtin_preset!(
             "Ballad",
             &["Bright Acoustic", "Cello", "String Ensemble 1"],
             "None",
@@ -63,7 +65,7 @@ fn default_presets() -> Vec<Preset> {
             0.92,
             18,
         ),
-        builtin(
+        builtin_preset!(
             "Biosphere Ambient",
             &[
                 "Pad 1 (new age)",
@@ -80,7 +82,7 @@ fn default_presets() -> Vec<Preset> {
             0.96,
             24,
         ),
-        builtin(
+        builtin_preset!(
             "Jazz Quartet",
             &["Acoustic Grand", "Acoustic Bass", "Tenor Sax"],
             "Jazz",
@@ -92,7 +94,7 @@ fn default_presets() -> Vec<Preset> {
             0.95,
             32,
         ),
-        builtin(
+        builtin_preset!(
             "Mysterious Soundtrack",
             &["Pizzicato Strings", "Clarinet", "Pad 1 (new age)"],
             "None",
@@ -104,7 +106,7 @@ fn default_presets() -> Vec<Preset> {
             0.97,
             36,
         ),
-        builtin(
+        builtin_preset!(
             "Cinematic Epic",
             &[
                 "String Ensemble 1",
@@ -122,7 +124,7 @@ fn default_presets() -> Vec<Preset> {
             0.95,
             30,
         ),
-        builtin(
+        builtin_preset!(
             "Classical Piano",
             &["Acoustic Grand"],
             "None",
@@ -134,7 +136,7 @@ fn default_presets() -> Vec<Preset> {
             0.92,
             16,
         ),
-        builtin(
+        builtin_preset!(
             "Lo-Fi Hip-Hop",
             &["Electric Piano 1", "Acoustic Bass", "Pad 2 (warm)"],
             "Brush",
@@ -146,7 +148,7 @@ fn default_presets() -> Vec<Preset> {
             0.95,
             28,
         ),
-        builtin(
+        builtin_preset!(
             "Meditative Music",
             &["Flute", "Pad 1 (new age)", "Pad 2 (warm)"],
             "None",
@@ -158,7 +160,7 @@ fn default_presets() -> Vec<Preset> {
             0.92,
             16,
         ),
-        builtin(
+        builtin_preset!(
             "Neon Intro",
             &[
                 "Electric Piano 2",
@@ -175,7 +177,7 @@ fn default_presets() -> Vec<Preset> {
             0.95,
             28,
         ),
-        builtin(
+        builtin_preset!(
             "Pulsing Tension",
             &[
                 "Pizzicato Strings",
@@ -192,7 +194,7 @@ fn default_presets() -> Vec<Preset> {
             0.97,
             38,
         ),
-        builtin(
+        builtin_preset!(
             "Rock",
             &[
                 "Electric Guitar(clean)",
@@ -208,7 +210,7 @@ fn default_presets() -> Vec<Preset> {
             0.94,
             24,
         ),
-        builtin(
+        builtin_preset!(
             "Symphonic Orchestra",
             &[
                 "Acoustic Grand",
@@ -227,7 +229,7 @@ fn default_presets() -> Vec<Preset> {
             0.96,
             28,
         ),
-        builtin(
+        builtin_preset!(
             "Tactical Synthwave",
             &[
                 "Lead 8 (bass+lead)",
@@ -244,7 +246,7 @@ fn default_presets() -> Vec<Preset> {
             0.96,
             34,
         ),
-        builtin(
+        builtin_preset!(
             "Suspense Soundtrack",
             &[
                 "Tremolo Strings",
@@ -261,7 +263,7 @@ fn default_presets() -> Vec<Preset> {
             0.97,
             42,
         ),
-        builtin(
+        builtin_preset!(
             "Funk",
             &[
                 "Electric Guitar(muted)",
@@ -277,7 +279,7 @@ fn default_presets() -> Vec<Preset> {
             0.94,
             28,
         ),
-        builtin(
+        builtin_preset!(
             "Folk",
             &["Acoustic Guitar(steel)", "Violin", "Flute"],
             "None",
@@ -289,7 +291,7 @@ fn default_presets() -> Vec<Preset> {
             0.94,
             24,
         ),
-        builtin(
+        builtin_preset!(
             "Chiptune",
             &["Lead 2 (sawtooth)", "Lead 5 (charang)", "Synth Bass 1"],
             "Electronic",
@@ -301,7 +303,7 @@ fn default_presets() -> Vec<Preset> {
             0.96,
             36,
         ),
-        builtin(
+        builtin_preset!(
             "Electronic Music",
             &["Lead 2 (sawtooth)", "Pad 2 (warm)", "Synth Bass 1"],
             "TR-808",
@@ -313,7 +315,7 @@ fn default_presets() -> Vec<Preset> {
             0.97,
             40,
         ),
-        builtin(
+        builtin_preset!(
             "Ambient",
             &["Pad 1 (new age)", "Pad 2 (warm)", "SynthStrings 1"],
             "None",

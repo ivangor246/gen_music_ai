@@ -33,7 +33,6 @@ fn bench_batched_generation() {
         batch_size: batch,
         random_seed: false,
         seed: 7,
-        ..GenerationRequest::default()
     };
 
     let steps = 20usize;

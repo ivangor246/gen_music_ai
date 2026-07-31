@@ -54,6 +54,10 @@ impl StackCache {
             .unwrap_or(0)
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn reset(&mut self) {
         for layer in &mut self.layers {
             layer.reset();
