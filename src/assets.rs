@@ -48,6 +48,10 @@ pub fn soundfont() -> Cow<'static, [u8]> {
 #[cfg(not(feature = "embed"))]
 fn read_dev_asset(relative: &str) -> Vec<u8> {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(relative);
-    std::fs::read(&path)
-        .unwrap_or_else(|err| panic!("dev asset {} not readable: {err}", path.display()))
+    std::fs::read(&path).unwrap_or_else(|err| {
+        panic!(
+            "required asset {} is not readable; run `bash scripts/download-assets.sh`: {err}",
+            path.display()
+        )
+    })
 }

@@ -6,15 +6,28 @@ powered by [candle](https://github.com/huggingface/candle), while audio synthesi
 in pure Rust with [oxisynth](https://crates.io/crates/oxisynth). No web server or JavaScript is
 used.
 
-The model (`midi-model-tv2o-medium`) and instrument bank are **embedded directly into the
-executable**, making the final binary self-contained with no additional downloads or setup.
+Release builds can embed the model (`midi-model-tv2o-medium`) and instrument bank directly into
+the executable, making the distributed binary self-contained.
 
 ## Build and Run
 
-Rust edition 2024 and `rustc` 1.85 or newer are required. Live playback also requires the ALSA
-system library (`libasound`); MIDI generation and MIDI/WAV export do not depend on it.
+Rust edition 2024, `rustc` 1.85 or newer, `curl`, and either `sha256sum` or `shasum` are required.
+Live playback also requires the ALSA system library (`libasound`); MIDI generation and MIDI/WAV
+export do not depend on it.
 
-Run from source with repository assets for faster rebuilds:
+Download the pinned runtime assets after cloning the repository. The script downloads only the
+468 MB safetensors checkpoint and the 51 MB SoundFont, verifies their SHA-256 checksums, and
+skips files that are already valid:
+
+```bash
+bash scripts/download-assets.sh
+```
+
+The download URLs are pinned to specific revisions of
+[SkyTNT's model checkpoint](https://huggingface.co/skytnt/midi-model-tv2o-medium/tree/0f8f265d4330f4e46527ac2313200254c5757f5f)
+and the [upstream SoundFont file](https://huggingface.co/skytnt/midi-model/blob/1b01fa36e954cd5c3981119754675e8f88c99ab4/soundfont.sf2).
+
+Run from source with the downloaded assets:
 
 ```bash
 cargo run
@@ -27,9 +40,10 @@ cargo build --release --features embed
 # -> target/release/gen_music_ai  (~500 MB, runnable from any directory)
 ```
 
-Without the `embed` feature, the model and instrument bank are loaded from the repository's
-`models/` and `assets/` directories. This is convenient during development and keeps rebuilds
-from producing a new binary hundreds of megabytes in size.
+Without the `embed` feature, the model and instrument bank are loaded at runtime from the
+repository's `models/` and `assets/` directories. This is convenient during development and
+keeps rebuilds from producing a new binary hundreds of megabytes in size. Both release and
+development builds use the same files installed by `scripts/download-assets.sh`.
 
 ## Features
 

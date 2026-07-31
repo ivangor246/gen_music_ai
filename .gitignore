@@ -1,9 +1,13 @@
 # Rust build artifacts
 /target
 
-# Large model weights and soundfont (kept on disk for the dev build, but too big
-# for git — supply them separately or let a release be built with --features embed)
-/models/
+# Large model weights and soundfont. Small model configs remain tracked so a
+# fresh clone can compile before the runtime assets are downloaded.
+/models/*
+!/models/midi-model-tv2o-medium/
+/models/midi-model-tv2o-medium/*
+!/models/midi-model-tv2o-medium/config.json
+!/models/midi-model-tv2o-medium/generation_config.json
 /assets/soundfont.sf2
 
 # Backup files
