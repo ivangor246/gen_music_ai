@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-07-31
+
 ### Added
 
 - Local CPU music generation with configurable General MIDI instruments, track structure, and
@@ -26,4 +28,5 @@ All notable changes to this project are documented in this file. The format is b
 - Added explicit confirmation before generated cache data is removed.
 - Added validation for release tags, package versions, archive targets, and downloaded assets.
 
-[Unreleased]: https://github.com/ivangor246/gen_music_ai/commits/main
+[Unreleased]: https://github.com/ivangor246/gen_music_ai/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/ivangor246/gen_music_ai/releases/tag/v0.1.0
