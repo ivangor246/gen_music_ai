@@ -13,7 +13,9 @@ use crate::settings::AUTO_VALUE;
 
 use super::density_canvas::DensityCanvas;
 use super::message::{FormMsg, Message};
-use super::state::{CONTEXT_WINDOWS, DRUM_KITS, ModelState, State, TIME_SIGNATURES};
+use super::state::{
+    CONTEXT_WINDOWS, DRUM_KITS, MAX_INSTRUMENTS, ModelState, State, TIME_SIGNATURES,
+};
 
 pub fn view(state: &State) -> Element<'_, Message> {
     let content = column![
@@ -43,7 +45,12 @@ fn model_panel(state: &State) -> Element<'_, Message> {
         ModelState::Ready(_) => "Loaded: CPU inference".to_string(),
         ModelState::Failed(error) => format!("Error: {error}"),
     };
-    let load = button(text("Load Model")).on_press(Message::LoadModel);
+    let load = button(text("Load Model"));
+    let load = if matches!(&state.model, ModelState::NotLoaded | ModelState::Failed(_)) {
+        load.on_press(Message::LoadModel)
+    } else {
+        load
+    };
     section(
         "Model",
         row![
@@ -69,13 +76,23 @@ fn presets_panel(state: &State) -> Element<'_, Message> {
     let name_input = text_input("Preset name", &state.new_preset_name)
         .on_input(Message::PresetNameInput)
         .width(Length::Fixed(200.0));
+    let delete = button(text("Delete"));
+    let delete = if state
+        .selected_preset
+        .as_deref()
+        .is_some_and(|name| state.preset_store.is_user(name))
+    {
+        delete.on_press(Message::DeletePreset)
+    } else {
+        delete
+    };
     section(
         "Presets",
         row![
             picker,
             name_input,
             button(text("Save Current")).on_press(Message::SavePreset),
-            button(text("Delete")).on_press(Message::DeletePreset),
+            delete,
         ]
         .spacing(8)
         .into(),
@@ -87,15 +104,21 @@ fn input_panel(state: &State) -> Element<'_, Message> {
 }
 
 fn composition_form(state: &State) -> Element<'_, Message> {
+    let selected_count = state.selected_instrument_count();
     let mut list = column![].spacing(2);
     for index in 0..PATCH_NAMES.len() {
-        list = list.push(
-            checkbox(PATCH_NAMES[index], state.instruments[index])
-                .on_toggle(move |_| Message::ToggleInstrument(index)),
-        );
+        let instrument = checkbox(PATCH_NAMES[index], state.instruments[index]);
+        let instrument = if state.instruments[index] || selected_count < MAX_INSTRUMENTS {
+            instrument.on_toggle(move |_| Message::ToggleInstrument(index))
+        } else {
+            instrument
+        };
+        list = list.push(instrument);
     }
     let instruments = column![
-        text("Instruments (up to 15; empty lets the model choose)"),
+        text(format!(
+            "Instruments ({selected_count}/{MAX_INSTRUMENTS}; empty lets the model choose)"
+        )),
         scrollable(list).height(Length::Fixed(220.0)),
     ]
     .spacing(4)
@@ -220,11 +243,27 @@ fn results_panel(state: &State) -> Element<'_, Message> {
     };
 
     let has_result = state.selected_result.is_some();
+    let clear_cache: Element<'_, Message> = if state.confirming_cache_clear && !state.generating {
+        row![
+            text("Delete all generated cache data?"),
+            button(text("Delete")).on_press(Message::ConfirmCacheClear),
+            button(text("Cancel")).on_press(Message::CancelCacheClear),
+        ]
+        .spacing(8)
+        .into()
+    } else {
+        let clear = button(text("Clear Cache"));
+        if state.generating {
+            clear.into()
+        } else {
+            clear.on_press(Message::RequestCacheClear).into()
+        }
+    };
     let export = row![
         maybe(button(text("Save MIDI")), has_result, Message::SaveMidi),
         maybe(button(text("Save WAV")), has_result, Message::SaveWav),
-        button(text("Open Folder")).on_press(Message::OpenOutputs),
-        button(text("Clear Cache")).on_press(Message::ClearCache),
+        button(text("Open Save Folder")).on_press(Message::OpenSaveDirectory),
+        clear_cache,
     ]
     .spacing(8);
 

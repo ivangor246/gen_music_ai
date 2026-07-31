@@ -1,6 +1,6 @@
 //! Built-in and user presets, mirroring the Python `PresetStore`.
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::paths::presets_file;
@@ -363,6 +363,10 @@ impl PresetStore {
         self.all().into_iter().find(|preset| preset.name == name)
     }
 
+    pub fn is_user(&self, name: &str) -> bool {
+        self.user.iter().any(|preset| preset.name == name)
+    }
+
     pub fn save(&mut self, name: &str, settings: GenerationSettings) -> Result<()> {
         let clean = name.trim();
         if clean.is_empty() {
@@ -371,32 +375,36 @@ impl PresetStore {
         if default_presets().iter().any(|preset| preset.name == clean) {
             bail!("That name is already used by a built-in preset.");
         }
-        self.user.retain(|preset| preset.name != clean);
-        self.user.push(Preset {
+        let mut updated = self.user.clone();
+        updated.retain(|preset| preset.name != clean);
+        updated.push(Preset {
             name: clean.to_string(),
             settings,
             built_in: false,
         });
-        self.persist();
+        Self::persist(&updated)?;
+        self.user = updated;
         Ok(())
     }
 
     pub fn delete(&mut self, name: &str) -> Result<()> {
-        if !self.user.iter().any(|preset| preset.name == name) {
+        if !self.is_user(name) {
             bail!("Built-in presets cannot be deleted.");
         }
-        self.user.retain(|preset| preset.name != name);
-        self.persist();
+        let mut updated = self.user.clone();
+        updated.retain(|preset| preset.name != name);
+        Self::persist(&updated)?;
+        self.user = updated;
         Ok(())
     }
 
-    fn persist(&self) {
+    fn persist(presets: &[Preset]) -> Result<()> {
         let path = presets_file();
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).ok();
+            std::fs::create_dir_all(parent)
+                .with_context(|| format!("creating {}", parent.display()))?;
         }
-        let mut items: Vec<StoredPreset> = self
-            .user
+        let mut items: Vec<StoredPreset> = presets
             .iter()
             .map(|preset| StoredPreset {
                 name: preset.name.clone(),
@@ -404,9 +412,9 @@ impl PresetStore {
             })
             .collect();
         items.sort_by_key(|item| item.name.to_lowercase());
-        if let Ok(text) = serde_json::to_string_pretty(&items) {
-            std::fs::write(path, text).ok();
-        }
+        let text = serde_json::to_string_pretty(&items).context("serializing presets")?;
+        std::fs::write(&path, text).with_context(|| format!("writing {}", path.display()))?;
+        Ok(())
     }
 }
 

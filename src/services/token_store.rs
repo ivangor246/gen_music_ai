@@ -17,6 +17,31 @@ use crate::core::tokenizer::vocab::{BOS_ID, EOS_ID, MAX_TOKEN_SEQ, PAD_ID};
 const ROW_BYTES: usize = MAX_TOKEN_SEQ * 2;
 const MAX_CONTROL_CHANGES: usize = 64;
 
+pub fn clear_cache(directory: &Path) -> Result<usize> {
+    let entries = match std::fs::read_dir(directory) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Err(error) => {
+            return Err(error).with_context(|| format!("reading {}", directory.display()));
+        }
+    };
+
+    let mut removed = 0;
+    for entry in entries {
+        let path = entry
+            .with_context(|| format!("reading an entry in {}", directory.display()))?
+            .path();
+        if matches!(
+            path.extension().and_then(|extension| extension.to_str()),
+            Some("tokens" | "json")
+        ) {
+            std::fs::remove_file(&path).with_context(|| format!("removing {}", path.display()))?;
+            removed += 1;
+        }
+    }
+    Ok(removed)
+}
+
 #[derive(Default, Serialize, Deserialize)]
 struct Timeline {
     coarse_time: i64,
@@ -293,6 +318,22 @@ fn rows_from_bytes(bytes: &[u8]) -> Vec<TokenRow> {
 mod tests {
     use super::*;
     use crate::core::tokenizer::codec::{Event, event_to_tokens};
+
+    #[test]
+    fn cache_clear_preserves_unrelated_files() {
+        let dir = std::env::temp_dir().join(format!("cache_clear_test_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("track.tokens"), []).unwrap();
+        std::fs::write(dir.join("track.json"), []).unwrap();
+        std::fs::write(dir.join("export.mid"), []).unwrap();
+
+        assert_eq!(clear_cache(&dir).unwrap(), 2);
+        assert!(!dir.join("track.tokens").exists());
+        assert!(!dir.join("track.json").exists());
+        assert!(dir.join("export.mid").exists());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
 
     #[test]
     fn timeline_tracks_end_tick() {

@@ -19,10 +19,6 @@ pub fn cache_dir() -> PathBuf {
     data_dir().join("cache")
 }
 
-pub fn outputs_dir() -> PathBuf {
-    data_dir().join("outputs")
-}
-
 pub fn presets_file() -> PathBuf {
     data_dir().join("presets.json")
 }
@@ -35,7 +31,9 @@ pub fn settings_file() -> PathBuf {
 pub fn default_downloads_dir() -> PathBuf {
     if let Some(dirs) = UserDirs::new() {
         if let Some(downloads) = dirs.download_dir() {
-            return downloads.to_path_buf();
+            if downloads.is_dir() {
+                return downloads.to_path_buf();
+            }
         }
         return dirs.home_dir().to_path_buf();
     }
@@ -45,5 +43,4 @@ pub fn default_downloads_dir() -> PathBuf {
 /// Create the writable directories used at runtime.
 pub fn ensure_runtime_directories() {
     std::fs::create_dir_all(cache_dir()).ok();
-    std::fs::create_dir_all(outputs_dir()).ok();
 }

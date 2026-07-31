@@ -51,8 +51,10 @@ pub enum Message {
     SaveMidi,
     SaveWav,
     Saved(Result<String, String>),
-    OpenOutputs,
-    ClearCache,
+    OpenSaveDirectory,
+    RequestCacheClear,
+    CancelCacheClear,
+    ConfirmCacheClear,
 
     // Player
     Play,

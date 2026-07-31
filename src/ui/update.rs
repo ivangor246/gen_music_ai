@@ -10,13 +10,13 @@ use crate::services::playback::PlaybackEngine;
 use crate::services::timeline::Timeline;
 
 use super::message::{FormMsg, Hidden, Message};
-use super::state::{ModelState, State};
+use super::state::{MAX_INSTRUMENTS, ModelState, State};
 use super::tasks;
 
 pub fn update(state: &mut State, message: Message) -> Task<Message> {
     match message {
         Message::LoadModel => {
-            if matches!(state.model, ModelState::Loading) {
+            if matches!(&state.model, ModelState::Loading | ModelState::Ready(_)) {
                 return Task::none();
             }
             state.model = ModelState::Loading;
@@ -34,8 +34,15 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
 
         Message::Form(form) => apply_form(state, form),
         Message::ToggleInstrument(index) => {
+            let Some(selected) = state.instruments.get(index).copied() else {
+                return Task::none();
+            };
+            if !selected && state.selected_instrument_count() >= MAX_INSTRUMENTS {
+                state.status = format!("Select no more than {MAX_INSTRUMENTS} instruments.");
+                return Task::none();
+            }
             if let Some(slot) = state.instruments.get_mut(index) {
-                *slot = !*slot;
+                *slot = !selected;
             }
         }
 
@@ -48,14 +55,20 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
         }
         Message::PresetNameInput(text) => state.new_preset_name = text,
         Message::SavePreset => {
-            let settings = state.settings();
+            let settings = match state.settings() {
+                Ok(settings) => settings,
+                Err(error) => {
+                    state.status = format!("Cannot save preset: {error}");
+                    return Task::none();
+                }
+            };
             let name = state.new_preset_name.clone();
             match state.preset_store.save(&name, settings) {
                 Ok(()) => {
                     state.status = "Preset saved.".to_string();
                     state.new_preset_name.clear();
                 }
-                Err(error) => state.status = error.to_string(),
+                Err(error) => state.status = format!("{error:#}"),
             }
         }
         Message::DeletePreset => {
@@ -65,12 +78,19 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
                         state.status = "Preset deleted.".to_string();
                         state.selected_preset = None;
                     }
-                    Err(error) => state.status = error.to_string(),
+                    Err(error) => state.status = format!("{error:#}"),
                 }
             }
         }
 
         Message::Generate => {
+            let request = match state.request() {
+                Ok(request) => request,
+                Err(error) => {
+                    state.status = format!("Invalid settings: {error}");
+                    return Task::none();
+                }
+            };
             let Some(model) = state.model() else {
                 state.status = "Load the model first.".to_string();
                 return Task::none();
@@ -79,10 +99,10 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
                 return Task::none();
             }
             stop_playback(state);
+            state.confirming_cache_clear = false;
             state.generating = true;
             state.progress = 0.0;
             state.status = "Generating…".to_string();
-            let request = state.request();
             return tasks::generate_task(model, request, state.cancel.clone());
         }
         Message::CancelGeneration => {
@@ -136,12 +156,28 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
         Message::SaveWav => return save_selected(state, true),
         Message::Saved(Ok(path)) => state.status = format!("Saved: {path}"),
         Message::Saved(Err(error)) => state.status = format!("Save failed: {error}"),
-        Message::OpenOutputs => {
-            let dir = crate::paths::outputs_dir();
-            std::fs::create_dir_all(&dir).ok();
-            open_path(&dir);
+        Message::OpenSaveDirectory => {
+            let directory = state.app_settings.save_directory();
+            match open_path(directory) {
+                Ok(()) => {
+                    state.status = format!("Opened: {}", directory.display());
+                }
+                Err(error) => {
+                    state.status = format!("Failed to open {}: {error}", directory.display());
+                }
+            }
         }
-        Message::ClearCache => clear_cache(state),
+        Message::RequestCacheClear => {
+            if !state.generating {
+                state.confirming_cache_clear = true;
+            }
+        }
+        Message::CancelCacheClear => state.confirming_cache_clear = false,
+        Message::ConfirmCacheClear => {
+            if !state.generating {
+                clear_cache(state);
+            }
+        }
 
         Message::Play => return play(state),
         Message::Pause => {
@@ -175,20 +211,26 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
 
 fn apply_form(state: &mut State, form: FormMsg) {
     match form {
-        FormMsg::Bpm(text) => state.bpm = text,
-        FormMsg::Bars(text) => state.bars = text,
-        FormMsg::EventsPerBar(text) => state.events_per_bar = text,
+        FormMsg::Bpm(text) => update_whole_number(&mut state.bpm, text),
+        FormMsg::Bars(text) => update_whole_number(&mut state.bars, text),
+        FormMsg::EventsPerBar(text) => update_whole_number(&mut state.events_per_bar, text),
         FormMsg::Temperature(value) => state.temperature = value,
         FormMsg::TopP(value) => state.top_p = value,
-        FormMsg::TopK(text) => state.top_k = text,
-        FormMsg::Batch(text) => state.batch = text,
-        FormMsg::Seed(text) => state.seed = text,
+        FormMsg::TopK(text) => update_whole_number(&mut state.top_k, text),
+        FormMsg::Batch(text) => update_whole_number(&mut state.batch, text),
+        FormMsg::Seed(text) => update_whole_number(&mut state.seed, text),
         FormMsg::RandomSeed(value) => state.random_seed = value,
         FormMsg::AllowControlChanges(value) => state.allow_cc = value,
         FormMsg::DrumKit(value) => state.drum_kit = value,
         FormMsg::TimeSignature(value) => state.time_signature = value,
         FormMsg::KeySignature(value) => state.key_signature = value,
         FormMsg::ContextWindow(value) => state.context_window = value,
+    }
+}
+
+fn update_whole_number(target: &mut String, value: String) {
+    if value.chars().all(|character| character.is_ascii_digit()) {
+        *target = value;
     }
 }
 
@@ -276,17 +318,8 @@ fn save_selected(state: &mut State, wav: bool) -> Task<Message> {
 
 fn clear_cache(state: &mut State) {
     let dir = crate::paths::cache_dir();
-    if let Ok(entries) = std::fs::read_dir(&dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if matches!(
-                path.extension().and_then(|e| e.to_str()),
-                Some("tokens" | "json")
-            ) {
-                std::fs::remove_file(path).ok();
-            }
-        }
-    }
+    let result = crate::services::token_store::clear_cache(&dir);
+    state.confirming_cache_clear = false;
     stop_playback(state);
     state.results.clear();
     state.result_durations.clear();
@@ -294,7 +327,10 @@ fn clear_cache(state: &mut State) {
     state.timeline = None;
     state.density.clear();
     state.duration = 0.0;
-    state.status = "Service cache cleared.".to_string();
+    state.status = match result {
+        Ok(removed) => format!("Service cache cleared ({removed} files removed)."),
+        Err(error) => format!("Could not completely clear the service cache: {error:#}"),
+    };
 }
 
 fn track_duration(track: &crate::services::generation::GeneratedTrack) -> f64 {
@@ -303,11 +339,14 @@ fn track_duration(track: &crate::services::generation::GeneratedTrack) -> f64 {
         .unwrap_or(0.0)
 }
 
-fn open_path(path: &std::path::Path) {
-    let opener = if cfg!(target_os = "macos") {
+fn open_path(path: &std::path::Path) -> std::io::Result<()> {
+    let opener = if cfg!(target_os = "windows") {
+        "explorer.exe"
+    } else if cfg!(target_os = "macos") {
         "open"
     } else {
         "xdg-open"
     };
-    std::process::Command::new(opener).arg(path).spawn().ok();
+    std::process::Command::new(opener).arg(path).spawn()?;
+    Ok(())
 }
