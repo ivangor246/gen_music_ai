@@ -88,12 +88,16 @@ The embedded build does not require separate model or SoundFont files at runtime
 larger and still depends on the operating system's supported audio and graphics facilities.
 The assets are required before running the default build or compiling with the `embed` feature.
 
-Pushing a tag that matches the package version, such as `v0.1.0`, starts the release workflow.
-It publishes unsigned, self-contained archives for x86-64 Linux, Windows, and macOS together
-with SHA-256 checksum files and a corresponding source archive. Each binary archive includes
-the license notices, relinking instructions, and required third-party source packages. Update
-the version in `Cargo.toml` before creating a new release tag. The macOS archive contains an
-application bundle, while the Linux archive includes desktop integration metadata and the
+Run the release workflow manually to build and checksum all platform archives without publishing
+a GitHub Release. Manual artifacts are retained for three days for inspection. Pushing a tag that
+matches the package version, such as `v0.1.0`, runs the same checks and publishes the release only
+after every archive passes checksum verification.
+
+The workflow produces unsigned, self-contained archives for x86-64 Linux, Windows, and macOS
+together with SHA-256 checksum files and a corresponding source archive. Each binary archive
+includes the license notices, relinking instructions, and required third-party source packages.
+Update the version in `Cargo.toml` before creating a new release tag. The macOS archive contains
+an application bundle, while the Linux archive includes desktop integration metadata and the
 Windows archive includes the application icon for portable distribution.
 
 ## User Data and Exports
