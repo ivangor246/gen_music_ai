@@ -142,6 +142,9 @@ The license policy is defined in `deny.toml` and is enforced automatically for p
 requests. Copyleft exceptions are limited to the pinned packages documented in
 `THIRD_PARTY_NOTICES.md`.
 
+Pushes and pull requests also run formatting, Clippy, and the lightweight test suite in CI.
+Heavy tests remain opt-in and are not executed by the default workflow.
+
 ## Project Structure
 
 - `src/core/` — model implementation, sampling constraints, tokenizer, and MIDI encoding.
