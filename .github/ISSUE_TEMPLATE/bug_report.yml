@@ -1,0 +1,68 @@
+name: Bug report
+description: Report a reproducible application problem
+title: "[Bug]: "
+body:
+  - type: checkboxes
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues for the same problem.
+          required: true
+        - label: I reproduced the problem with the latest published release.
+          required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Enter the application version or release tag.
+      placeholder: 0.1.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: operating-system
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - Windows
+        - macOS
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Problem
+      description: Describe what happened and how it affects your workflow.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: List the smallest sequence of actions that reproduces the problem.
+      placeholder: |
+        1. Open the application
+        2. Configure ...
+        3. Select ...
+        4. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Additional diagnostics
+      description: Add relevant logs or screenshots after removing private paths and personal data.
+      render: text

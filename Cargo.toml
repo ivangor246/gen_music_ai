@@ -3,7 +3,14 @@ name = "gen_music_ai"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.89"
+description = "Desktop application for local multi-instrument music generation and MIDI/WAV export"
 license = "Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/ivangor246/gen_music_ai"
+homepage = "https://github.com/ivangor246/gen_music_ai"
+keywords = ["midi", "music-generation", "audio", "desktop"]
+categories = ["multimedia::audio"]
+publish = false
 
 [features]
 # `embed` bakes the 447MB model and 49MB soundfont into the binary via include_bytes!.

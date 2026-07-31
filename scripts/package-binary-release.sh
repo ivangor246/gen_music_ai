@@ -38,7 +38,10 @@ create_archive_stage
 readonly PACKAGE_DIRECTORY="${ARCHIVE_TEMPORARY}/${PACKAGE_NAME}"
 readonly SOURCE_DIRECTORY="${PACKAGE_DIRECTORY}/third-party-sources"
 
-mkdir -p -- "${PACKAGE_DIRECTORY}" "${SOURCE_DIRECTORY}" "${OUTPUT_DIRECTORY}"
+mkdir -p -- \
+    "${PACKAGE_DIRECTORY}/docs" \
+    "${SOURCE_DIRECTORY}" \
+    "${OUTPUT_DIRECTORY}"
 package_platform_binary \
     "${TARGET}" \
     "${REPOSITORY_ROOT}" \
@@ -48,11 +51,14 @@ package_platform_binary \
     "${VERSION}" \
     "${ARCHIVE_TEMPORARY}"
 cp -- \
+    "${REPOSITORY_ROOT}/CHANGELOG.md" \
     "${REPOSITORY_ROOT}/LICENSE" \
     "${REPOSITORY_ROOT}/README.md" \
     "${REPOSITORY_ROOT}/RELINKING.md" \
+    "${REPOSITORY_ROOT}/SECURITY.md" \
     "${REPOSITORY_ROOT}/THIRD_PARTY_NOTICES.md" \
     "${PACKAGE_DIRECTORY}/"
+cp -R -- "${REPOSITORY_ROOT}/docs/images" "${PACKAGE_DIRECTORY}/docs/images"
 cp -R -- "${REPOSITORY_ROOT}/licenses" "${PACKAGE_DIRECTORY}/licenses"
 
 bash "${REPOSITORY_ROOT}/scripts/download-oxisynth-sources.sh" "${SOURCE_DIRECTORY}"

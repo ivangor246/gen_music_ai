@@ -1,10 +1,20 @@
 # gen_music_ai
 
+[![CI](https://github.com/ivangor246/gen_music_ai/actions/workflows/ci.yml/badge.svg)](https://github.com/ivangor246/gen_music_ai/actions/workflows/ci.yml)
+[![License audit](https://github.com/ivangor246/gen_music_ai/actions/workflows/licenses.yml/badge.svg)](https://github.com/ivangor246/gen_music_ai/actions/workflows/licenses.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 `gen_music_ai` is a desktop application for generating multi-instrument music locally. Configure
 instruments and generation parameters, preview the results, and export selected tracks as
 Standard MIDI or WAV.
 
 Generation runs entirely on the CPU and does not require a GPU or a remote inference service.
+
+## Interface
+
+![Track configuration with instrument search and presets](docs/images/track-configuration.png)
+
+![Generation controls, result export, and playback](docs/images/generation-results.png)
 
 ## Features
 
@@ -13,12 +23,44 @@ Generation runs entirely on the CPU and does not require a GPU or a remote infer
 - Tune temperature, top-p, top-k, result count, seed, control changes, and musical memory.
 - Start from built-in style presets or save and delete custom presets.
 - Generate several candidates with reproducible seeds and cancel an active generation.
-- Preview a selected result with playback, seeking, and a note-density timeline.
-- Export only the selected result as `.mid` or as 44.1 kHz, 16-bit stereo `.wav`.
+- Preview any result with playback, seeking, and a note-density timeline.
+- Export each result directly from its card as `.mid` or as 44.1 kHz, 16-bit stereo `.wav`.
 - Keep long compositions in a disk-backed token cache instead of retaining their complete token
   history in memory.
 
-## Requirements
+## Download
+
+Unsigned, self-contained archives for x86-64 Linux, Windows, and macOS are published on the
+[GitHub Releases page](https://github.com/ivangor246/gen_music_ai/releases). Each archive has a
+matching `.sha256` file. Verify it after downloading, replacing the filename with the selected
+artifact:
+
+```bash
+sha256sum --check gen_music_ai-0.1.0-x86_64-unknown-linux-gnu.tar.gz.sha256
+```
+
+Extract the archive and run `gen_music_ai` on Linux, `gen_music_ai.exe` on Windows, or
+`Gen Music AI.app` on macOS. The archives embed the model checkpoint and SoundFont, so no
+additional asset download is required. Because the builds are currently unsigned, the operating
+system may ask for confirmation before the first launch.
+
+## Runtime Notes
+
+- A 64-bit x86 processor and approximately 520 MB of disk space in addition to temporary files.
+- An audio output device for live playback and WAV rendering.
+- A GPU is neither required nor currently used.
+
+Model loading and generation require substantially more memory than the checkpoint size because
+the model weights are converted to `f32` for CPU inference. Larger result counts and musical
+memory settings increase peak memory use. Generation speed depends on the CPU and selected
+settings.
+
+To prevent accidental runaway jobs, the interface limits a request to 256 bars, 128 base events
+per bar, 30 minutes of estimated playback, and 8,192 base events across all requested results.
+
+## Run from Source
+
+### Prerequisites
 
 - Rust 1.89.0, installed automatically by `rustup` from `rust-toolchain.toml`.
 - `curl` and either `sha256sum` or `shasum` for downloading runtime assets.
@@ -31,16 +73,6 @@ On Debian and Ubuntu, install the ALSA development files required by `cpal`:
 ```bash
 sudo apt install pkg-config libasound2-dev
 ```
-
-Model loading and generation require substantially more memory than the checkpoint size because
-the model weights are converted to `f32` for CPU inference. Larger result counts and musical
-memory settings increase peak memory use. Generation speed depends on the CPU and selected
-settings.
-
-To prevent accidental runaway jobs, the interface limits a request to 256 bars, 128 base events
-per bar, 30 minutes of estimated playback, and 8,192 base events across all requested results.
-
-## Run from Source
 
 Download the pinned model checkpoint and SoundFont after cloning the repository:
 
@@ -66,8 +98,8 @@ In the application:
 
 1. Select **Load Model** and wait until the model is ready.
 2. Choose a preset or configure the instruments and generation parameters.
-3. Select **Generate**.
-4. Choose a result, preview it, and save it as MIDI or WAV.
+3. Select **Generate Tracks**.
+4. Use a result card to preview the track or export it as MIDI or WAV.
 
 ## Release Build
 
@@ -162,6 +194,7 @@ Heavy tests remain opt-in and are not executed by the default workflow.
 - `models/` — tracked model configuration and the downloaded checkpoint location.
 - `assets/` — application icon resources and the downloaded SoundFont location.
 - `licenses/` — complete license and attribution texts for bundled third-party components.
+- `docs/` — interface screenshots and the release checklist.
 - `packaging/` — platform-specific desktop metadata and icon resources.
 - `scripts/` — reproducible asset and third-party source downloads with checksum verification.
 - `tests/` — lightweight tests, opt-in model tests, fixtures, and the generation benchmark.
@@ -177,3 +210,6 @@ Rust dependencies retain their own licenses and are not relicensed by this proje
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) before redistributing source code, assets, or
 compiled binaries. Binary distributors must also follow the OxiSynth source and relinking
 requirements in [RELINKING.md](RELINKING.md).
+
+Release changes are recorded in [CHANGELOG.md](CHANGELOG.md). Please report security issues using
+the process described in [SECURITY.md](SECURITY.md).
