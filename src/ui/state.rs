@@ -55,6 +55,7 @@ pub struct State {
 
     // Form
     pub instruments: Vec<bool>,
+    pub instrument_query: String,
     pub drum_kit: String,
     pub time_signature: String,
     pub key_signature: String,
@@ -110,6 +111,7 @@ impl State {
             model: ModelState::NotLoaded,
             status,
             instruments: vec![false; 128],
+            instrument_query: String::new(),
             drum_kit: "None".to_string(),
             time_signature: "4/4".to_string(),
             key_signature: AUTO_VALUE.to_string(),

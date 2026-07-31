@@ -35,6 +35,7 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
         }
 
         Message::Form(form) => apply_form(state, form),
+        Message::InstrumentQueryInput(query) => state.instrument_query = query,
         Message::ToggleInstrument(index) => {
             let Some(selected) = state.instruments.get(index).copied() else {
                 return Task::none();
@@ -177,8 +178,8 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
             }
         }
 
-        Message::SaveMidi => return save_selected(state, false),
-        Message::SaveWav => return save_selected(state, true),
+        Message::SaveResultMidi(index) => return save_result(state, index, false),
+        Message::SaveResultWav(index) => return save_result(state, index, true),
         Message::Saved(Ok(path)) => state.status = format!("Saved: {path}"),
         Message::Saved(Err(error)) => state.status = format!("Save failed: {error}"),
         Message::OpenSaveDirectory => {
@@ -337,14 +338,9 @@ fn clear_timeline(state: &mut State) {
     state.density_cache.clear();
 }
 
-fn save_selected(state: &mut State, wav: bool) -> Task<Message> {
-    let Some(index) = state.selected_result else {
-        state.status = "No result is selected.".to_string();
-        return Task::none();
-    };
+fn save_result(state: &mut State, index: usize, wav: bool) -> Task<Message> {
     let Some(track) = state.results.get(index).cloned() else {
-        state.selected_result = None;
-        state.status = "The selected result is no longer available.".to_string();
+        state.status = "The requested result is no longer available.".to_string();
         return Task::none();
     };
     let extension = if wav { "wav" } else { "mid" };

@@ -1,0 +1,114 @@
+//! Searchable General MIDI instrument browser.
+
+use iced::widget::{button, checkbox, column, container, row, scrollable, text, text_input};
+use iced::{Element, Length};
+
+use crate::core::midi::gm::{PATCH_FAMILIES, PATCH_NAMES};
+
+use super::message::Message;
+use super::state::{MAX_INSTRUMENTS, State};
+use super::theme;
+
+pub fn view(state: &State) -> Element<'_, Message> {
+    let selected_count = state.selected_instrument_count();
+    let search = text_input("Search instruments…", &state.instrument_query)
+        .on_input(Message::InstrumentQueryInput)
+        .style(theme::input)
+        .width(Length::Fill);
+    let clear = button(text("×  Clear"))
+        .on_press_maybe(
+            (!state.instrument_query.is_empty())
+                .then_some(Message::InstrumentQueryInput(String::new())),
+        )
+        .style(theme::secondary_button);
+
+    column![
+        row![
+            text(format!("Instruments ({selected_count}/{MAX_INSTRUMENTS})")).size(15),
+            iced::widget::Space::with_width(Length::Fill),
+            text("Empty = model choice")
+                .size(12)
+                .style(iced::widget::text::secondary),
+        ]
+        .spacing(theme::SPACE_SM),
+        selected_tags(state),
+        row![search, clear].spacing(theme::SPACE_SM),
+        scrollable(instrument_list(state, selected_count)).height(Length::Fixed(240.0)),
+    ]
+    .spacing(theme::SPACE_SM)
+    .width(Length::Fill)
+    .into()
+}
+
+fn selected_tags(state: &State) -> Element<'_, Message> {
+    let mut tags = row![].spacing(theme::SPACE_XS);
+    let mut has_selection = false;
+    for (index, selected) in state.instruments.iter().copied().enumerate() {
+        if selected {
+            has_selection = true;
+            tags = tags.push(
+                button(text(format!("{}  ×", PATCH_NAMES[index])).size(12))
+                    .on_press(Message::ToggleInstrument(index))
+                    .padding([theme::SPACE_XS, theme::SPACE_SM])
+                    .style(theme::tag_button),
+            );
+        }
+    }
+
+    if has_selection {
+        tags.wrap().into()
+    } else {
+        container(
+            text("No instruments selected")
+                .size(12)
+                .style(iced::widget::text::secondary),
+        )
+        .padding(theme::SPACE_XS)
+        .into()
+    }
+}
+
+fn instrument_list(state: &State, selected_count: usize) -> Element<'_, Message> {
+    let query = state.instrument_query.trim().to_ascii_lowercase();
+    let mut list = column![].spacing(theme::SPACE_XS);
+    let mut match_count = 0;
+
+    for family in PATCH_FAMILIES {
+        let family_matches = family.name.to_ascii_lowercase().contains(&query);
+        let matches: Vec<usize> = (family.start..family.end)
+            .filter(|index| {
+                query.is_empty()
+                    || family_matches
+                    || PATCH_NAMES[*index].to_ascii_lowercase().contains(&query)
+            })
+            .collect();
+        if matches.is_empty() {
+            continue;
+        }
+
+        match_count += matches.len();
+        list = list.push(
+            text(family.name)
+                .size(13)
+                .style(iced::widget::text::primary),
+        );
+        for index in matches {
+            let instrument =
+                checkbox(PATCH_NAMES[index], state.instruments[index]).style(theme::check);
+            let instrument = if state.instruments[index] || selected_count < MAX_INSTRUMENTS {
+                instrument.on_toggle(move |_| Message::ToggleInstrument(index))
+            } else {
+                instrument
+            };
+            list = list.push(instrument);
+        }
+    }
+
+    if match_count == 0 {
+        container(text("No matching instruments").style(iced::widget::text::secondary))
+            .padding(theme::SPACE_SM)
+            .into()
+    } else {
+        list.into()
+    }
+}

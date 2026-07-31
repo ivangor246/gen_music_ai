@@ -34,6 +34,7 @@ pub enum Message {
     // Form
     Form(FormMsg),
     ToggleInstrument(usize),
+    InstrumentQueryInput(String),
 
     // Presets
     SelectPreset(String),
@@ -50,8 +51,8 @@ pub enum Message {
     // Results / export
     SelectResult(usize),
     TimelineReady(usize, Result<Hidden<Timeline>, String>),
-    SaveMidi,
-    SaveWav,
+    SaveResultMidi(usize),
+    SaveResultWav(usize),
     Saved(Result<String, String>),
     OpenSaveDirectory,
     RequestCacheClear,

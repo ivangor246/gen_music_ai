@@ -1,7 +1,10 @@
 mod density_canvas;
+mod instrument_browser;
 mod message;
+mod results_view;
 mod state;
 mod tasks;
+mod theme;
 mod update;
 mod view;
 
@@ -41,6 +44,7 @@ pub fn run() -> iced::Result {
             ..window::Settings::default()
         })
         .centered()
+        .theme(|_| theme::application())
         .subscription(subscription)
         .run_with(|| (State::new(), Task::none()))
 }

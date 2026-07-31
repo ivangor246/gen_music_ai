@@ -29,7 +29,7 @@ impl Program<Message> for DensityCanvas<'_> {
             frame.stroke(
                 &Path::line(Point::new(0.0, middle), Point::new(width, middle)),
                 Stroke::default()
-                    .with_color(Color::from_rgb8(0x40, 0x52, 0x61))
+                    .with_color(Color::from_rgb8(0x20, 0x2c, 0x4a))
                     .with_width(1.0),
             );
             if !self.density.is_empty() {
@@ -43,7 +43,7 @@ impl Program<Message> for DensityCanvas<'_> {
                             Point::new(x, middle + amplitude),
                         ),
                         Stroke::default()
-                            .with_color(Color::from_rgb8(0x4f, 0xa3, 0xd1))
+                            .with_color(Color::from_rgb8(0x33, 0xd9, 0xe6))
                             .with_width(2.0),
                     );
                 }
@@ -55,7 +55,7 @@ impl Program<Message> for DensityCanvas<'_> {
         overlay.stroke(
             &Path::line(Point::new(x, 0.0), Point::new(x, overlay.height())),
             Stroke::default()
-                .with_color(Color::from_rgb8(0xf6, 0xc8, 0x5f))
+                .with_color(Color::from_rgb8(0x9b, 0x68, 0xff))
                 .with_width(2.0),
         );
 

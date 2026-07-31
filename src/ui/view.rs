@@ -1,20 +1,19 @@
 //! The application view and its reusable panel helpers.
 
 use iced::widget::{
-    Space, button, canvas, checkbox, column, container, pick_list, progress_bar, row, scrollable,
-    slider, text, text_input,
+    Space, button, checkbox, column, container, pick_list, progress_bar, row, scrollable, slider,
+    text, text_input,
 };
 use iced::{Element, Length};
 
-use crate::core::midi::gm::PATCH_NAMES;
 use crate::services::generation::KEY_SIGNATURES;
 use crate::settings::AUTO_VALUE;
 
-use super::density_canvas::DensityCanvas;
+use super::instrument_browser;
 use super::message::{FormMsg, Message};
-use super::state::{
-    CONTEXT_WINDOWS, DRUM_KITS, MAX_INSTRUMENTS, ModelState, State, TIME_SIGNATURES,
-};
+use super::results_view;
+use super::state::{CONTEXT_WINDOWS, DRUM_KITS, ModelState, State, TIME_SIGNATURES};
+use super::theme;
 
 const WIDE_LAYOUT_THRESHOLD: f32 = 960.0;
 const COMBO_WIDTH: f32 = 175.0;
@@ -26,11 +25,11 @@ pub fn view(state: &State) -> Element<'_, Message> {
             container(model_panel(state)).width(Length::FillPortion(2)),
             container(presets_panel(state)).width(Length::FillPortion(3)),
         ]
-        .spacing(8)
+        .spacing(theme::SPACE_MD)
         .into()
     } else {
         column![model_panel(state), presets_panel(state)]
-            .spacing(8)
+            .spacing(theme::SPACE_MD)
             .into()
     };
     let content = column![
@@ -39,17 +38,18 @@ pub fn view(state: &State) -> Element<'_, Message> {
         params_panel(state, wide),
         results_panel(state),
     ]
-    .spacing(8)
-    .padding(10)
+    .spacing(theme::SPACE_MD)
+    .padding(theme::SPACE_MD)
     .width(Length::Fill);
 
     scrollable(content).width(Length::Fill).into()
 }
 
 fn section<'a>(title: &'a str, body: Element<'a, Message>) -> Element<'a, Message> {
-    container(column![text(title).size(18), body].spacing(6))
-        .padding(8)
+    container(column![text(title).size(20), body].spacing(theme::SPACE_SM))
+        .padding(theme::SPACE_MD)
         .width(Length::Fill)
+        .style(theme::card)
         .into()
 }
 
@@ -60,7 +60,14 @@ fn model_panel(state: &State) -> Element<'_, Message> {
         ModelState::Ready(_) => "Loaded: CPU inference".to_string(),
         ModelState::Failed(error) => format!("Error: {error}"),
     };
-    let load = button(text("Load Model"));
+    let status = text(status).size(13);
+    let status = match &state.model {
+        ModelState::NotLoaded => status.style(iced::widget::text::secondary),
+        ModelState::Loading => status.style(iced::widget::text::primary),
+        ModelState::Ready(_) => status.style(iced::widget::text::success),
+        ModelState::Failed(_) => status.style(iced::widget::text::danger),
+    };
+    let load = button(text("↓  Load Model")).style(theme::primary_button);
     let load = if matches!(&state.model, ModelState::NotLoaded | ModelState::Failed(_)) {
         load.on_press(Message::LoadModel)
     } else {
@@ -74,10 +81,10 @@ fn model_panel(state: &State) -> Element<'_, Message> {
                 Space::with_width(Length::Fill),
                 load,
             ]
-            .spacing(10),
-            text(status),
+            .spacing(theme::SPACE_SM),
+            status,
         ]
-        .spacing(6)
+        .spacing(theme::SPACE_SM)
         .into(),
     )
 }
@@ -90,11 +97,13 @@ fn presets_panel(state: &State) -> Element<'_, Message> {
         .map(|p| p.name)
         .collect();
     let picker = pick_list(names, state.selected_preset.clone(), Message::SelectPreset)
-        .placeholder("Select a preset");
+        .placeholder("Select a preset")
+        .style(theme::selection);
     let name_input = text_input("Preset name", &state.new_preset_name)
         .on_input(Message::PresetNameInput)
+        .style(theme::input)
         .width(Length::Fixed(200.0));
-    let delete = button(text("Delete"));
+    let delete = button(text("×  Delete")).style(theme::danger_button);
     let delete = if state
         .selected_preset
         .as_deref()
@@ -109,10 +118,12 @@ fn presets_panel(state: &State) -> Element<'_, Message> {
         row![
             picker,
             name_input,
-            button(text("Save Current")).on_press(Message::SavePreset),
+            button(text("+  Save Current"))
+                .on_press(Message::SavePreset)
+                .style(theme::secondary_button),
             delete,
         ]
-        .spacing(8)
+        .spacing(theme::SPACE_SM)
         .wrap()
         .into(),
     )
@@ -131,34 +142,17 @@ fn composition_form(state: &State, wide: bool) -> Element<'_, Message> {
             container(instruments).width(Length::FillPortion(2)),
             container(controls).width(Length::FillPortion(3)),
         ]
-        .spacing(12)
+        .spacing(theme::SPACE_MD)
         .into()
     } else {
-        column![instruments, controls].spacing(10).into()
+        column![instruments, controls]
+            .spacing(theme::SPACE_MD)
+            .into()
     }
 }
 
 fn instrument_selector(state: &State) -> Element<'_, Message> {
-    let selected_count = state.selected_instrument_count();
-    let mut list = column![].spacing(2);
-    for index in 0..PATCH_NAMES.len() {
-        let instrument = checkbox(PATCH_NAMES[index], state.instruments[index]);
-        let instrument = if state.instruments[index] || selected_count < MAX_INSTRUMENTS {
-            instrument.on_toggle(move |_| Message::ToggleInstrument(index))
-        } else {
-            instrument
-        };
-        list = list.push(instrument);
-    }
-    column![
-        text(format!(
-            "Instruments ({selected_count}/{MAX_INSTRUMENTS}; empty lets the model choose)"
-        )),
-        scrollable(list).height(Length::Fixed(200.0)),
-    ]
-    .spacing(4)
-    .width(Length::Fill)
-    .into()
+    instrument_browser::view(state)
 }
 
 fn track_controls(state: &State) -> Element<'_, Message> {
@@ -180,7 +174,7 @@ fn track_controls(state: &State) -> Element<'_, Message> {
             Message::Form(FormMsg::KeySignature(v))
         }),
     ]
-    .spacing(10)
+    .spacing(theme::SPACE_SM)
     .wrap();
 
     let dimensions = row![
@@ -194,16 +188,24 @@ fn track_controls(state: &State) -> Element<'_, Message> {
             Message::Form(FormMsg::EventsPerBar(v))
         }),
     ]
-    .spacing(10)
+    .spacing(theme::SPACE_SM)
     .wrap();
 
     column![
         text("Track Settings").size(15),
-        musical,
-        dimensions,
-        text(state.length_label()),
+        container(musical)
+            .padding(theme::SPACE_SM)
+            .width(Length::Fill)
+            .style(theme::inset_card),
+        container(dimensions)
+            .padding(theme::SPACE_SM)
+            .width(Length::Fill)
+            .style(theme::inset_card),
+        text(state.length_label())
+            .size(13)
+            .style(iced::widget::text::secondary),
     ]
-    .spacing(6)
+    .spacing(theme::SPACE_SM)
     .width(Length::Fill)
     .into()
 }
@@ -232,10 +234,10 @@ fn params_panel(state: &State, wide: bool) -> Element<'_, Message> {
                 FormMsg::TopK(v)
             )),
         ]
-        .spacing(12)
+        .spacing(theme::SPACE_SM)
         .wrap(),
     ]
-    .spacing(6);
+    .spacing(theme::SPACE_SM);
 
     let output = column![
         text("Results and Memory").size(15),
@@ -245,15 +247,17 @@ fn params_panel(state: &State, wide: bool) -> Element<'_, Message> {
             )),
             number("Seed", &state.seed, |v| Message::Form(FormMsg::Seed(v))),
         ]
-        .spacing(12)
+        .spacing(theme::SPACE_SM)
         .wrap(),
         row![
             checkbox("Random Seed", state.random_seed)
-                .on_toggle(|v| Message::Form(FormMsg::RandomSeed(v))),
+                .on_toggle(|v| Message::Form(FormMsg::RandomSeed(v)))
+                .style(theme::check),
             checkbox("Allow MIDI Control Changes", state.allow_cc)
-                .on_toggle(|v| Message::Form(FormMsg::AllowControlChanges(v))),
+                .on_toggle(|v| Message::Form(FormMsg::AllowControlChanges(v)))
+                .style(theme::check),
         ]
-        .spacing(12)
+        .spacing(theme::SPACE_SM)
         .wrap(),
         combo_owned(
             "Musical Memory",
@@ -262,150 +266,88 @@ fn params_panel(state: &State, wide: bool) -> Element<'_, Message> {
             |v| Message::Form(FormMsg::ContextWindow(v)),
         ),
     ]
-    .spacing(6);
+    .spacing(theme::SPACE_SM);
+
+    let sampling = container(sampling)
+        .padding(theme::SPACE_SM)
+        .width(Length::Fill)
+        .style(theme::inset_card);
+    let output = container(output)
+        .padding(theme::SPACE_SM)
+        .width(Length::Fill)
+        .style(theme::inset_card);
 
     let settings: Element<'_, Message> = if wide {
         row![
-            container(sampling).width(Length::FillPortion(3)),
-            container(output).width(Length::FillPortion(2)),
+            sampling.width(Length::FillPortion(3)),
+            output.width(Length::FillPortion(2)),
         ]
-        .spacing(12)
+        .spacing(theme::SPACE_MD)
         .into()
     } else {
-        column![sampling, output].spacing(10).into()
+        column![sampling, output].spacing(theme::SPACE_SM).into()
     };
 
     let generate = if state.generating {
-        button(text("Stop")).on_press(Message::CancelGeneration)
+        button(text("■  Stop Generation"))
+            .on_press(Message::CancelGeneration)
+            .style(theme::danger_button)
     } else {
-        button(text("Generate")).on_press(Message::Generate)
+        button(text("▶  Generate Tracks"))
+            .on_press(Message::Generate)
+            .style(theme::primary_button)
     };
+    let status = generation_status(state);
     let controls = column![
         row![
-            generate,
-            progress_bar(0.0..=1.0, state.progress).width(Length::Fill),
+            generate.padding([theme::SPACE_SM, theme::SPACE_MD]),
+            progress_bar(0.0..=1.0, state.progress)
+                .style(theme::progress)
+                .width(Length::Fill),
         ]
-        .spacing(10),
-        text(&state.status),
+        .spacing(theme::SPACE_SM),
+        status,
     ]
-    .spacing(6);
-
-    section("Generation", column![settings, controls].spacing(8).into())
-}
-
-fn results_panel(state: &State) -> Element<'_, Message> {
-    let result_names: Vec<String> = (0..state.results.len())
-        .map(|i| format!("Result {}", i + 1))
-        .collect();
-    let selected = state.selected_result.map(|i| format!("Result {}", i + 1));
-    let selector = pick_list(result_names, selected, |choice| {
-        let index = choice
-            .rsplit(' ')
-            .next()
-            .and_then(|n| n.parse::<usize>().ok())
-            .map(|n| n - 1)
-            .unwrap_or(0);
-        Message::SelectResult(index)
-    })
-    .placeholder("Track");
-
-    let durations = if state.results.is_empty() {
-        "No results.".to_string()
-    } else {
-        let mut lines = format!("Seed: {}\n", state.seed_used);
-        for (i, duration) in state.result_durations.iter().enumerate() {
-            lines.push_str(&format!("Result {}: {}\n", i + 1, time_label(*duration)));
-        }
-        lines
-    };
-
-    let has_result = state.selected_result.is_some();
-    let clear_cache: Element<'_, Message> = if state.confirming_cache_clear && !state.generating {
-        row![
-            text("Delete all generated cache data?"),
-            button(text("Delete")).on_press(Message::ConfirmCacheClear),
-            button(text("Cancel")).on_press(Message::CancelCacheClear),
-        ]
-        .spacing(8)
-        .into()
-    } else {
-        let clear = button(text("Clear Cache"));
-        if state.generating {
-            clear.into()
-        } else {
-            clear.on_press(Message::RequestCacheClear).into()
-        }
-    };
-    let export = row![
-        maybe(button(text("Save MIDI")), has_result, Message::SaveMidi),
-        maybe(button(text("Save WAV")), has_result, Message::SaveWav),
-        button(text("Open Save Folder")).on_press(Message::OpenSaveDirectory),
-        clear_cache,
-    ]
-    .spacing(8)
-    .wrap();
+    .spacing(theme::SPACE_SM);
 
     section(
-        "Results",
-        column![
-            row![text("Track to play and save"), selector]
-                .spacing(10)
-                .wrap(),
-            text(durations),
-            export,
-            player_panel(state),
-        ]
-        .spacing(8)
-        .into(),
+        "Generation",
+        column![settings, controls].spacing(theme::SPACE_SM).into(),
     )
 }
 
-fn player_panel(state: &State) -> Element<'_, Message> {
-    let fraction = if state.duration > 0.0 {
-        (state.position / state.duration) as f32
-    } else {
-        0.0
-    };
-    let visualization = canvas(DensityCanvas {
-        cache: &state.density_cache,
-        density: &state.density,
-        position_fraction: fraction,
-    })
-    .width(Length::Fill)
-    .height(Length::Fixed(76.0));
-
-    let seek = slider(0.0..=1.0, fraction, Message::Seek).step(0.001);
-
-    let play_label = if state.playing { "Pause" } else { "Play" };
-    let play_message = if state.playing {
-        Message::Pause
-    } else {
-        Message::Play
-    };
-    let has_timeline = state.timeline.is_some();
-
-    let controls = row![
-        maybe(button(text(play_label)), has_timeline, play_message),
-        maybe(button(text("Stop")), has_timeline, Message::StopPlayback),
-        Space::with_width(Length::Fill),
-        text(format!(
-            "{} / {}",
-            time_label(state.position),
-            time_label(state.duration)
-        )),
-    ]
-    .spacing(8);
-
-    container(column![visualization, seek, controls].spacing(6))
-        .padding(8)
-        .into()
+fn results_panel(state: &State) -> Element<'_, Message> {
+    section("Results", results_view::view(state))
 }
 
 // --- helpers ---
 
+fn generation_status(state: &State) -> Element<'_, Message> {
+    let message = text(&state.status).size(13);
+    let status = state.status.to_ascii_lowercase();
+    if status.contains("fail")
+        || status.contains("error")
+        || status.contains("invalid")
+        || status.contains("unavailable")
+        || status.contains("could not")
+    {
+        message.style(iced::widget::text::danger).into()
+    } else if state.generating || matches!(&state.model, ModelState::Loading) {
+        message.style(iced::widget::text::primary).into()
+    } else if status.contains("complete")
+        || status.contains("ready")
+        || status.contains("saved")
+        || status.contains("opened")
+    {
+        message.style(iced::widget::text::success).into()
+    } else {
+        message.style(iced::widget::text::secondary).into()
+    }
+}
+
 fn labeled<'a>(label: &'a str, widget: impl Into<Element<'a, Message>>) -> Element<'a, Message> {
     column![text(label).size(13), widget.into()]
-        .spacing(2)
+        .spacing(theme::SPACE_XS)
         .into()
 }
 
@@ -422,7 +364,7 @@ fn labeled_value<'a>(
         ],
         widget.into(),
     ]
-    .spacing(2)
+    .spacing(theme::SPACE_XS)
     .width(Length::Fixed(180.0))
     .into()
 }
@@ -436,6 +378,7 @@ fn number<'a>(
         label,
         text_input("", value)
             .on_input(on_input)
+            .style(theme::input)
             .width(Length::Fixed(120.0)),
     )
 }
@@ -462,23 +405,8 @@ fn combo_owned<'a>(
 ) -> Element<'a, Message> {
     labeled(
         label,
-        pick_list(options, Some(selected.to_string()), on_select).width(Length::Fixed(COMBO_WIDTH)),
+        pick_list(options, Some(selected.to_string()), on_select)
+            .style(theme::selection)
+            .width(Length::Fixed(COMBO_WIDTH)),
     )
-}
-
-fn maybe<'a>(
-    b: iced::widget::Button<'a, Message>,
-    enabled: bool,
-    message: Message,
-) -> Element<'a, Message> {
-    if enabled {
-        b.on_press(message).into()
-    } else {
-        b.into()
-    }
-}
-
-fn time_label(seconds: f64) -> String {
-    let total = seconds.max(0.0) as u64;
-    format!("{}:{:02}", total / 60, total % 60)
 }

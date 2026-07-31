@@ -131,6 +131,96 @@ pub const PATCH_NAMES: [&str; 128] = [
     "Gunshot",
 ];
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PatchFamily {
+    pub name: &'static str,
+    pub start: usize,
+    pub end: usize,
+}
+
+pub const PATCH_FAMILIES: [PatchFamily; 16] = [
+    PatchFamily {
+        name: "Pianos",
+        start: 0,
+        end: 8,
+    },
+    PatchFamily {
+        name: "Chromatic Percussion",
+        start: 8,
+        end: 16,
+    },
+    PatchFamily {
+        name: "Organs",
+        start: 16,
+        end: 24,
+    },
+    PatchFamily {
+        name: "Guitars",
+        start: 24,
+        end: 32,
+    },
+    PatchFamily {
+        name: "Basses",
+        start: 32,
+        end: 40,
+    },
+    PatchFamily {
+        name: "Strings",
+        start: 40,
+        end: 48,
+    },
+    PatchFamily {
+        name: "Ensembles",
+        start: 48,
+        end: 56,
+    },
+    PatchFamily {
+        name: "Brass",
+        start: 56,
+        end: 64,
+    },
+    PatchFamily {
+        name: "Reeds",
+        start: 64,
+        end: 72,
+    },
+    PatchFamily {
+        name: "Pipes",
+        start: 72,
+        end: 80,
+    },
+    PatchFamily {
+        name: "Synth Leads",
+        start: 80,
+        end: 88,
+    },
+    PatchFamily {
+        name: "Synth Pads",
+        start: 88,
+        end: 96,
+    },
+    PatchFamily {
+        name: "Synth Effects",
+        start: 96,
+        end: 104,
+    },
+    PatchFamily {
+        name: "World",
+        start: 104,
+        end: 112,
+    },
+    PatchFamily {
+        name: "Percussive",
+        start: 112,
+        end: 120,
+    },
+    PatchFamily {
+        name: "Sound Effects",
+        start: 120,
+        end: 128,
+    },
+];
+
 /// Program number for a GM patch name, if it exists.
 pub fn patch_number(name: &str) -> Option<u16> {
     PATCH_NAMES
