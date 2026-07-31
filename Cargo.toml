@@ -2,6 +2,7 @@
 name = "gen_music_ai"
 version = "0.1.0"
 edition = "2024"
+license = "Apache-2.0"
 
 [features]
 # `embed` bakes the 447MB model and 49MB soundfont into the binary via include_bytes!.

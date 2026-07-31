@@ -112,3 +112,12 @@ cargo test --release --features heavy-tests --test bench_gen -- --ignored --noca
 Together, the light and heavy suites cover numerical parity of the model's forward pass,
 byte-for-byte MIDI export, timeline and note-density correctness, WAV rendering, and end-to-end
 generation.
+
+## License
+
+Except where otherwise noted, the source code in this repository is licensed under the
+[Apache License 2.0](LICENSE).
+
+The model checkpoint, SoundFont, and third-party Rust dependencies retain their respective
+licenses and are not relicensed by this project. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+for details.
