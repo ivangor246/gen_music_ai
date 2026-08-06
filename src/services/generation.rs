@@ -13,7 +13,9 @@ use rand_chacha::ChaCha8Rng;
 use crate::core::constraints::{DecodeFlags, allowed_event_ids, allowed_param_ids};
 use crate::core::midi::gm;
 use crate::core::model::midi_model::MidiModel;
-use crate::core::sampler::{apply_mask, sample_top_p_k, softmax_with_temp};
+use crate::core::sampler::{
+    apply_mask, apply_repetition_penalty, no_repeat_ngram_bans, sample_top_p_k, softmax_with_temp,
+};
 use crate::core::tokenizer::codec::{Event, TokenRow, bos_row, event_to_tokens};
 use crate::core::tokenizer::events::EventType;
 use crate::core::tokenizer::vocab::{BOS_ID, EOS_ID, MAX_TOKEN_SEQ, PAD_ID, event_type_from_id};
@@ -46,6 +48,18 @@ struct DecodeParams {
     top_p: f32,
     top_k: usize,
 }
+
+/// EOS stays masked out until a track has covered this fraction of its target
+/// length, so the model can't end far short of the requested bar count.
+const EOS_MIN_PROGRESS: f64 = 0.9;
+/// How many recently-sampled raw token ids feed the repetition penalty and
+/// n-gram guard, per track. Bounded so it stays cheap on weak devices.
+const REPETITION_WINDOW: usize = 200;
+/// Repetition penalty strength (1.0 = disabled). See `apply_repetition_penalty`.
+const REPETITION_PENALTY: f32 = 1.3;
+/// n-gram size for the no-repeat guard: if the last `NGRAM_BAN_SIZE - 1` raw
+/// ids already occurred earlier, the id that followed them there is banned.
+const NGRAM_BAN_SIZE: usize = 24;
 
 #[derive(Debug, Clone)]
 pub struct GeneratedTrack {
@@ -111,6 +125,7 @@ pub fn generate(
             max_events,
             generated: 0,
             done: false,
+            history: Vec::new(),
         });
     }
 
@@ -150,6 +165,9 @@ struct TrackGen {
     max_events: usize,
     generated: usize,
     done: bool,
+    /// Recent raw token ids (bounded to `REPETITION_WINDOW`), used to steer
+    /// this track away from looping the same phrase.
+    history: Vec<u32>,
 }
 
 impl TrackGen {
@@ -217,7 +235,29 @@ fn run_batches(
                 break;
             }
             let hidden = model.base_forward(&input, &mut base_cache)?;
-            let rows = sample_event_batch(model, &hidden, flags, params, rng, batch_idx.len())?;
+            let allow_eos: Vec<bool> = batch_idx
+                .iter()
+                .map(|&index| {
+                    let track = &tracks[index];
+                    let progress =
+                        track.completed(target_ticks) as f64 / target_ticks.max(1) as f64;
+                    progress >= EOS_MIN_PROGRESS || track.generated + 1 >= track.max_events
+                })
+                .collect();
+            let history: Vec<&[u32]> = batch_idx
+                .iter()
+                .map(|&index| tracks[index].history.as_slice())
+                .collect();
+            let rows = sample_event_batch(
+                model,
+                &hidden,
+                flags,
+                params,
+                rng,
+                batch_idx.len(),
+                &allow_eos,
+                &history,
+            )?;
             for (position, &index) in batch_idx.iter().enumerate() {
                 let row = rows[position];
                 if row[0] == EOS_ID as i16 {
@@ -225,6 +265,16 @@ fn run_batches(
                 } else if tracks[index].has_work() {
                     tracks[index].store.append(&row)?;
                     tracks[index].generated += 1;
+                    let track_history = &mut tracks[index].history;
+                    track_history.extend(
+                        row.iter()
+                            .map(|&value| value as u32)
+                            .filter(|&id| id != PAD_ID),
+                    );
+                    let excess = track_history.len().saturating_sub(REPETITION_WINDOW);
+                    if excess > 0 {
+                        track_history.drain(0..excess);
+                    }
                 }
             }
             let completed: i64 = tracks
@@ -242,6 +292,11 @@ fn run_batches(
 }
 
 /// Decode one event per batch item, applying per-item constrained sampling.
+/// `allow_eos[item]` gates whether eos is a legal id at slot 0 (see
+/// `EOS_MIN_PROGRESS`); `history[item]` feeds the repetition penalty and the
+/// no-repeat-ngram guard, both aimed at the same failure mode: a section that
+/// loops the same short phrase once it starts feeding on its own output.
+#[allow(clippy::too_many_arguments)]
 fn sample_event_batch(
     model: &MidiModel,
     hidden: &Tensor,
@@ -249,6 +304,8 @@ fn sample_event_batch(
     params: &DecodeParams,
     rng: &mut ChaCha8Rng,
     batch: usize,
+    allow_eos: &[bool],
+    history: &[&[u32]],
 ) -> Result<Vec<TokenRow>> {
     let device = model.device().clone();
     let mut token_cache = model.token_cache();
@@ -270,12 +327,28 @@ fn sample_event_batch(
                 last_ids[item] = PAD_ID;
                 continue;
             }
-            let allowed = if slot == 0 {
-                allowed_event_ids(flags)
+            let mut allowed = if slot == 0 {
+                allowed_event_ids(flags, allow_eos[item])
             } else {
                 allowed_param_ids(kinds[item].expect("event kind set at slot 0"), slot, flags)
             };
-            let mut probs = softmax_with_temp(&rows_logits[item], params.temperature);
+            if slot == 0 {
+                let banned = no_repeat_ngram_bans(history[item], NGRAM_BAN_SIZE);
+                if !banned.is_empty() {
+                    let filtered: Vec<u32> = allowed
+                        .iter()
+                        .copied()
+                        .filter(|id| !banned.contains(id))
+                        .collect();
+                    // Never ban away every option; fall back to the unfiltered set.
+                    if !filtered.is_empty() {
+                        allowed = filtered;
+                    }
+                }
+            }
+            let mut logits = rows_logits[item].clone();
+            apply_repetition_penalty(&mut logits, history[item], REPETITION_PENALTY);
+            let mut probs = softmax_with_temp(&logits, params.temperature);
             apply_mask(&mut probs, &allowed);
             let sample = sample_top_p_k(&probs, params.top_p, params.top_k, rng);
             last_ids[item] = sample;

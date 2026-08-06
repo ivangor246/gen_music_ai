@@ -58,7 +58,10 @@ fn default_top_p() -> f32 {
     0.94
 }
 fn default_top_k() -> usize {
-    20
+    // A bit above 20: with the repetition penalty and n-gram guard now doing
+    // the heavy lifting against loops, a slightly wider pool gives sampling
+    // more room without hurting coherence.
+    28
 }
 fn default_true() -> bool {
     true

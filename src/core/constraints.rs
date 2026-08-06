@@ -39,14 +39,18 @@ impl DecodeFlags {
     }
 }
 
-/// Allowed ids for slot 0: enabled event types plus eos.
-pub fn allowed_event_ids(flags: &DecodeFlags) -> Vec<u32> {
+/// Allowed ids for slot 0: enabled event types, plus eos when `allow_eos` is set.
+/// Callers gate `allow_eos` on generation progress so the model cannot end a
+/// track far short of its requested length.
+pub fn allowed_event_ids(flags: &DecodeFlags, allow_eos: bool) -> Vec<u32> {
     let mut ids: Vec<u32> = EVENT_ORDER
         .iter()
         .filter(|&&event| !flags.is_event_disabled(event))
         .map(|&event| event_type_id(event))
         .collect();
-    ids.push(EOS_ID);
+    if allow_eos {
+        ids.push(EOS_ID);
+    }
     ids
 }
 
@@ -76,13 +80,20 @@ mod tests {
     #[test]
     fn event_ids_respect_disables() {
         let flags = DecodeFlags::new(true, true, true, &[]);
-        let ids = allowed_event_ids(&flags);
+        let ids = allowed_event_ids(&flags, true);
         // note, key_signature, time_signature remain; patch/cc/tempo removed; eos present.
         assert!(ids.contains(&event_type_id(EventType::Note)));
         assert!(!ids.contains(&event_type_id(EventType::PatchChange)));
         assert!(!ids.contains(&event_type_id(EventType::ControlChange)));
         assert!(!ids.contains(&event_type_id(EventType::SetTempo)));
         assert!(ids.contains(&EOS_ID));
+    }
+
+    #[test]
+    fn eos_dropped_when_not_allowed() {
+        let flags = DecodeFlags::new(false, false, false, &[]);
+        let ids = allowed_event_ids(&flags, false);
+        assert!(!ids.contains(&EOS_ID));
     }
 
     #[test]

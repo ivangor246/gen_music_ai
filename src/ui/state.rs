@@ -121,7 +121,7 @@ impl State {
             context_window: AUTO_VALUE.to_string(),
             temperature: 1.0,
             top_p: 0.94,
-            top_k: "20".to_string(),
+            top_k: "28".to_string(),
             batch: "4".to_string(),
             seed: "0".to_string(),
             random_seed: true,
