@@ -19,7 +19,7 @@ use crate::core::sampler::{
     SamplingParams, TokenHistory, no_repeat_ngram_bans, sample_constrained,
 };
 use crate::core::tokenizer::codec::{Event, TokenRow, bos_row, event_to_tokens};
-use crate::core::tokenizer::events::EventType;
+use crate::core::tokenizer::events::{EventType, Field};
 use crate::core::tokenizer::vocab::{
     BOS_ID, EOS_ID, MAX_TOKEN_SEQ, PAD_ID, VOCAB_SIZE, event_type_from_id,
 };
@@ -54,7 +54,8 @@ const EOS_MIN_PROGRESS: f64 = 0.9;
 /// How many recently-sampled raw token ids feed the repetition penalty and
 /// n-gram guard, per track. Bounded so it stays cheap on weak devices.
 const REPETITION_WINDOW: usize = 200;
-/// Repetition penalty strength (1.0 = disabled). See `sample_constrained`.
+/// Repetition penalty strength (1.0 = disabled). See `penalty_for`, which
+/// decides the slots it applies to.
 const REPETITION_PENALTY: f32 = 1.3;
 /// n-gram size for the no-repeat guard: if the last `NGRAM_BAN_SIZE - 1` raw
 /// ids already occurred earlier, the id that followed them there is banned.
@@ -393,7 +394,7 @@ fn sample_event_batch(
                 &rows_logits[item],
                 &allowed,
                 history,
-                REPETITION_PENALTY,
+                penalty_for(kinds[item], slot),
                 params,
                 rng,
             );
@@ -422,6 +423,24 @@ fn sample_event_batch(
         }
     }
     Ok(rows)
+}
+
+/// Repetition penalty for the slot being decoded.
+///
+/// It only belongs on pitch. Time deltas, tracks, channels, durations and
+/// velocities repeat by nature -- that repetition *is* the rhythm, the voicing
+/// and the meter. Penalising them makes each reused value lose to the next
+/// larger one, so the field escalates: time deltas walk 1, 2, 5, 8, 16 until a
+/// single event jumps past the end of the requested track. Getting stuck is
+/// only a real failure for pitch.
+fn penalty_for(kind: Option<EventType>, slot: usize) -> f32 {
+    let is_pitch = kind
+        .and_then(|kind| {
+            slot.checked_sub(1)
+                .and_then(|index| kind.fields().get(index))
+        })
+        .is_some_and(|field| *field == Field::Pitch);
+    if is_pitch { REPETITION_PENALTY } else { 1.0 }
 }
 
 fn stack_rows(prompts: &[&[TokenRow]], device: &Device) -> Result<Tensor> {
@@ -534,6 +553,19 @@ fn timestamp() -> u128 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_pitch_carries_the_repetition_penalty() {
+        // Note fields: time1, time2, track, channel, pitch, velocity, duration.
+        assert_eq!(penalty_for(Some(EventType::Note), 5), REPETITION_PENALTY);
+        for slot in [0, 1, 2, 3, 4, 6, 7] {
+            assert_eq!(penalty_for(Some(EventType::Note), slot), 1.0, "slot {slot}");
+        }
+        // Slot 5 of a control change is the controller, not a pitch.
+        assert_eq!(penalty_for(Some(EventType::ControlChange), 5), 1.0);
+        // Slot 0 picks the event type, before any kind is known.
+        assert_eq!(penalty_for(None, 0), 1.0);
+    }
 
     #[test]
     fn context_splits_evenly_between_prompt_and_decode() {
