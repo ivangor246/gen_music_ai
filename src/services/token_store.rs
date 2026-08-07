@@ -119,6 +119,11 @@ impl MusicalState {
         });
     }
 
+    /// Number of state slots currently tracked.
+    fn len(&self) -> usize {
+        self.events.len()
+    }
+
     /// Most recent state rows whose slot is not already `covered`, newest last.
     fn rows_beyond(&self, covered: &HashSet<String>, limit: usize) -> Vec<TokenRow> {
         let rows: Vec<TokenRow> = self
@@ -249,8 +254,16 @@ impl TokenStore {
     /// carry + the recent tail events.
     pub fn model_prompt(&mut self, context_size: usize) -> Result<Vec<TokenRow>> {
         let capacity = context_size.max(1);
-        let mut tail: Vec<TokenRow> = self
-            .tail(capacity - 1)?
+        let setup_limit = (context_size / 3).clamp(1, MAX_SETUP_ROWS);
+        // Reserve room for the state block before picking the tail. The tail has
+        // to be final before its setup keys are read: trimming it afterwards
+        // could drop a setup event that had already been counted as covered,
+        // losing that state from the prompt entirely.
+        let reserve = self.state.len().min(setup_limit);
+        let tail_budget = capacity.saturating_sub(1 + reserve).max(1);
+
+        let tail: Vec<TokenRow> = self
+            .tail(tail_budget)?
             .into_iter()
             .filter(|row| {
                 let head = row[0];
@@ -265,14 +278,7 @@ impl TokenStore {
             .iter()
             .filter_map(|row| tokens_to_event(row).as_ref().and_then(setup_key))
             .collect();
-        let setup = self
-            .state
-            .rows_beyond(&covered, (context_size / 3).clamp(1, MAX_SETUP_ROWS));
-
-        let budget = capacity.saturating_sub(1 + setup.len());
-        if tail.len() > budget {
-            tail.drain(0..tail.len() - budget);
-        }
+        let setup = self.state.rows_beyond(&covered, setup_limit);
 
         let mut prompt = Vec::with_capacity(1 + setup.len() + tail.len());
         prompt.push(bos_row(BOS_ID));
@@ -444,6 +450,51 @@ mod tests {
                 prompt.iter().filter(|row| row[0] == id).count(),
                 1,
                 "{kind:?} should appear once"
+            );
+        }
+
+        store.finish().unwrap();
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Trimming the tail after reading its setup keys used to lose state: the
+    /// trimmed rows still counted as "covered", so they were neither kept in the
+    /// tail nor re-added at the head.
+    #[test]
+    fn section_prompt_keeps_setup_trimmed_off_the_tail() {
+        let (dir, mut store) = store_at("prompt_trim");
+        store.append(&bos_row(BOS_ID)).unwrap();
+        append(
+            &mut store,
+            &Event::new(EventType::TimeSignature, vec![0, 0, 0, 3, 1]),
+        );
+        append(
+            &mut store,
+            &Event::new(EventType::SetTempo, vec![0, 0, 0, 120]),
+        );
+        append(
+            &mut store,
+            &Event::new(EventType::PatchChange, vec![0, 0, 1, 0, 40]),
+        );
+        for _ in 0..6 {
+            append(
+                &mut store,
+                &Event::new(EventType::Note, vec![1, 0, 1, 0, 60, 100, 8]),
+            );
+        }
+
+        let prompt = store.model_prompt(9).unwrap();
+        assert!(prompt.len() <= 9, "prompt must fit the context window");
+        for kind in [
+            EventType::TimeSignature,
+            EventType::SetTempo,
+            EventType::PatchChange,
+        ] {
+            let id = event_type_id(kind) as i16;
+            assert_eq!(
+                prompt.iter().filter(|row| row[0] == id).count(),
+                1,
+                "{kind:?} must survive exactly once"
             );
         }
 
