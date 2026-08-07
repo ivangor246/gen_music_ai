@@ -1,5 +1,6 @@
 //! Manual generation-speed benchmark. Run with:
-//!   cargo test --release --features heavy-tests --test bench_gen -- --ignored --nocapture
+//!   scripts/capped.sh cargo test --release --features heavy-tests \
+//!       --test bench_gen -- --ignored --nocapture
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Instant;

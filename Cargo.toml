@@ -70,6 +70,12 @@ opt-level = 3
 panic = "abort"
 strip = "symbols"
 
+# Dependencies are rebuilt from bitcode by fat LTO anyway, so splitting them
+# into one codegen unit each only makes the build slower and far more memory
+# hungry -- enough to matter on a machine that is already short on RAM.
+[profile.release.package."*"]
+codegen-units = 16
+
 # `cargo test --release` builds with this profile. It inherits from `release`,
 # whose fat LTO and single codegen unit need several GB of RAM to link -- enough
 # to push a small machine into swap while building the heavy tests. Tests only

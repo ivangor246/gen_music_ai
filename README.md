@@ -157,14 +157,22 @@ Model parity, end-to-end generation, and WAV rendering are opt-in because they r
 downloaded assets and significantly more time and memory:
 
 ```bash
-cargo test --locked --features heavy-tests -- --test-threads=1
+scripts/capped.sh cargo test --locked --features heavy-tests -- --test-threads=1
 ```
 
 The generation benchmark is ignored by default and can be run separately:
 
 ```bash
-cargo test --release --locked --features heavy-tests --test bench_gen -- --ignored --nocapture
+scripts/capped.sh cargo test --release --locked --features heavy-tests \
+    --test bench_gen -- --ignored --nocapture
 ```
+
+`scripts/capped.sh` runs the command inside a memory-capped cgroup and sizes build parallelism
+from free memory rather than from the core count. Building these tests is the expensive part —
+several `rustc` processes at roughly 2 GiB each — and on a machine short on RAM an uncapped
+build will swap until the desktop stops responding. The wrapper is not test-specific; it works
+for `cargo run --release` too. Override with `CAP_MEMORY`, `CAP_JOBS` or `RAYON_NUM_THREADS`;
+without `systemd-run` it warns and runs uncapped.
 
 Check formatting with:
 
