@@ -126,19 +126,17 @@ pub fn generate(
         });
     }
 
-    run_batches(
+    let ctx = RunContext {
         model,
-        &mut tracks,
-        section_size as usize,
-        prompt_size as usize,
-        &flags,
-        &params,
-        &mut rng,
-        cancel,
+        flags: &flags,
+        params: &params,
+        device: model.device().clone(),
+        section_size: section_size as usize,
+        prompt_size: prompt_size as usize,
         total_work,
         target_ticks,
-        &mut progress,
-    )?;
+    };
+    run_batches(&ctx, &mut tracks, &mut rng, cancel, &mut progress)?;
 
     let mut outputs = Vec::with_capacity(tracks.len());
     for track in tracks {
@@ -177,108 +175,147 @@ impl TrackGen {
     }
 }
 
-/// Generate all tracks in lockstep batches: each outer step runs one base-net
-/// forward over the whole batch, then decodes one event per track. Tracks that
-/// reach their target or emit eos drop out of the batch.
-#[allow(clippy::too_many_arguments)]
-fn run_batches(
-    model: &MidiModel,
-    tracks: &mut [TrackGen],
+/// Everything a section needs that stays fixed for the whole run.
+struct RunContext<'a> {
+    model: &'a MidiModel,
+    flags: &'a DecodeFlags,
+    params: &'a SamplingParams,
+    device: Device,
     section_size: usize,
     prompt_size: usize,
-    flags: &DecodeFlags,
-    params: &SamplingParams,
-    rng: &mut ChaCha8Rng,
-    cancel: &AtomicBool,
     total_work: i64,
     target_ticks: i64,
+}
+
+/// State carried across sections: the tracks plus the buffers reused by every
+/// forward and sampling step.
+struct RunState<'a> {
+    tracks: &'a mut [TrackGen],
+    histories: Vec<TokenHistory>,
+    base_cache: StackCache,
+    token_cache: StackCache,
+    rng: &'a mut ChaCha8Rng,
+}
+
+/// Generate all tracks in lockstep batches, section by section. Tracks that
+/// reach their target or emit eos drop out.
+fn run_batches(
+    ctx: &RunContext,
+    tracks: &mut [TrackGen],
+    rng: &mut ChaCha8Rng,
+    cancel: &AtomicBool,
     progress: &mut impl FnMut(i64, i64),
 ) -> Result<()> {
-    let device = model.device().clone();
-    // Both caches are allocated once and rewound per section / per event, so a
+    // The caches are allocated once and rewound per section / per event, so a
     // long run never re-allocates them.
-    let mut base_cache = model.base_cache(prompt_size + section_size);
-    let mut token_cache = model.token_cache(MAX_TOKEN_SEQ);
-    // One rolling id window per track, indexed like `tracks`.
-    let mut histories: Vec<TokenHistory> = (0..tracks.len())
-        .map(|_| TokenHistory::new(VOCAB_SIZE as usize, REPETITION_WINDOW))
-        .collect();
+    let mut state = RunState {
+        histories: (0..tracks.len())
+            .map(|_| TokenHistory::new(VOCAB_SIZE as usize, REPETITION_WINDOW))
+            .collect(),
+        base_cache: ctx.model.base_cache(ctx.prompt_size + ctx.section_size),
+        token_cache: ctx.model.token_cache(MAX_TOKEN_SEQ),
+        tracks,
+        rng,
+    };
 
     while !cancel.load(Ordering::Relaxed) {
-        let active: Vec<usize> = (0..tracks.len())
-            .filter(|&i| tracks[i].has_work())
-            .collect();
-        if active.is_empty() {
+        let mut prompts: Vec<(usize, Vec<TokenRow>)> = Vec::with_capacity(state.tracks.len());
+        for index in 0..state.tracks.len() {
+            if state.tracks[index].has_work() {
+                let prompt = state.tracks[index].store.model_prompt(ctx.prompt_size)?;
+                prompts.push((index, prompt));
+            }
+        }
+        if prompts.is_empty() {
             break;
         }
-        // Batch only tracks that share a prompt length (normally all active ones,
-        // since the batch advances in lockstep); the rest wait for the next pass.
-        let mut prompts: Vec<(usize, Vec<TokenRow>)> = Vec::with_capacity(active.len());
-        for &index in &active {
-            prompts.push((index, tracks[index].store.model_prompt(prompt_size)?));
-        }
-        let target_len = prompts[0].1.len();
-        let batch: Vec<(usize, Vec<TokenRow>)> = prompts
-            .into_iter()
-            .filter(|(_, prompt)| prompt.len() == target_len)
-            .collect();
-        let batch_idx: Vec<usize> = batch.iter().map(|(index, _)| *index).collect();
-        let prompt_rows: Vec<Vec<TokenRow>> = batch.into_iter().map(|(_, prompt)| prompt).collect();
 
-        let events_in_section = batch_idx
+        // A batch is one tensor, so its members must share a prompt length. That
+        // normally holds -- they advance in lockstep -- but drifts apart as soon
+        // as one track emits a setup event the others lack. Run every group in
+        // this pass rather than deferring the odd ones out to a later one, or a
+        // diverged batch degenerates into one track per base-net forward.
+        prompts.sort_by_key(|(_, prompt)| prompt.len());
+        let mut start = 0;
+        while start < prompts.len() {
+            let length = prompts[start].1.len();
+            let end = start + prompts[start..].partition_point(|(_, p)| p.len() == length);
+            run_section(ctx, &mut state, &prompts[start..end], cancel, progress)?;
+            start = end;
+        }
+    }
+    Ok(())
+}
+
+/// Decode one section for a batch of tracks sharing a prompt length: one
+/// base-net forward per step over the whole batch, then one event per track.
+fn run_section(
+    ctx: &RunContext,
+    state: &mut RunState,
+    batch: &[(usize, Vec<TokenRow>)],
+    cancel: &AtomicBool,
+    progress: &mut impl FnMut(i64, i64),
+) -> Result<()> {
+    let batch_idx: Vec<usize> = batch.iter().map(|(index, _)| *index).collect();
+    let prompt_rows: Vec<&[TokenRow]> = batch.iter().map(|(_, rows)| rows.as_slice()).collect();
+
+    let events_in_section = batch_idx
+        .iter()
+        .map(|&index| state.tracks[index].max_events - state.tracks[index].generated)
+        .min()
+        .unwrap_or(0)
+        .min(ctx.section_size);
+
+    let mut input = stack_rows(&prompt_rows, &ctx.device)?;
+    state.base_cache.reset();
+
+    for _ in 0..events_in_section {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        let hidden = ctx.model.base_forward(&input, &mut state.base_cache)?;
+        let allow_eos: Vec<bool> = batch_idx
             .iter()
-            .map(|&index| tracks[index].max_events - tracks[index].generated)
-            .min()
-            .unwrap_or(0)
-            .min(section_size);
-
-        let mut input = stack_rows(&prompt_rows, &device)?;
-        base_cache.reset();
-
-        for _ in 0..events_in_section {
-            if cancel.load(Ordering::Relaxed) {
-                break;
+            .map(|&index| {
+                let track = &state.tracks[index];
+                let done =
+                    track.completed(ctx.target_ticks) as f64 / ctx.target_ticks.max(1) as f64;
+                done >= EOS_MIN_PROGRESS || track.generated + 1 >= track.max_events
+            })
+            .collect();
+        let rows = sample_event_batch(
+            ctx.model,
+            &hidden,
+            &mut state.token_cache,
+            ctx.flags,
+            ctx.params,
+            state.rng,
+            &batch_idx,
+            &allow_eos,
+            &mut state.histories,
+        )?;
+        for (position, &index) in batch_idx.iter().enumerate() {
+            let row = rows[position];
+            if row[0] == EOS_ID as i16 {
+                state.tracks[index].done = true;
+            } else if state.tracks[index].has_work() {
+                state.tracks[index].store.append(&row)?;
+                state.tracks[index].generated += 1;
             }
-            let hidden = model.base_forward(&input, &mut base_cache)?;
-            let allow_eos: Vec<bool> = batch_idx
-                .iter()
-                .map(|&index| {
-                    let track = &tracks[index];
-                    let progress =
-                        track.completed(target_ticks) as f64 / target_ticks.max(1) as f64;
-                    progress >= EOS_MIN_PROGRESS || track.generated + 1 >= track.max_events
-                })
-                .collect();
-            let rows = sample_event_batch(
-                model,
-                &hidden,
-                &mut token_cache,
-                flags,
-                params,
-                rng,
-                &batch_idx,
-                &allow_eos,
-                &mut histories,
-            )?;
-            for (position, &index) in batch_idx.iter().enumerate() {
-                let row = rows[position];
-                if row[0] == EOS_ID as i16 {
-                    tracks[index].done = true;
-                } else if tracks[index].has_work() {
-                    tracks[index].store.append(&row)?;
-                    tracks[index].generated += 1;
-                }
-            }
-            let completed: i64 = tracks
-                .iter()
-                .map(|track| track.completed(target_ticks))
-                .sum();
-            progress(completed, total_work);
-            if !batch_idx.iter().any(|&index| tracks[index].has_work()) {
-                break;
-            }
-            input = next_rows(&rows, &device)?;
         }
+        let completed: i64 = state
+            .tracks
+            .iter()
+            .map(|track| track.completed(ctx.target_ticks))
+            .sum();
+        progress(completed, ctx.total_work);
+        if !batch_idx
+            .iter()
+            .any(|&index| state.tracks[index].has_work())
+        {
+            break;
+        }
+        input = next_rows(&rows, &ctx.device)?;
     }
     Ok(())
 }
@@ -379,12 +416,12 @@ fn sample_event_batch(
     Ok(rows)
 }
 
-fn stack_rows(prompts: &[Vec<TokenRow>], device: &Device) -> Result<Tensor> {
+fn stack_rows(prompts: &[&[TokenRow]], device: &Device) -> Result<Tensor> {
     let batch = prompts.len();
     let length = prompts[0].len();
     let mut flat = Vec::with_capacity(batch * length * MAX_TOKEN_SEQ);
     for prompt in prompts {
-        for row in prompt {
+        for row in prompt.iter() {
             flat.extend(row.iter().map(|&value| value as u32));
         }
     }
