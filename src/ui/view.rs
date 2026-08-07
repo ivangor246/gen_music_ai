@@ -86,6 +86,18 @@ fn model_panel(state: &State) -> Element<'_, Message> {
     } else {
         load
     };
+
+    // Switching precision rebuilds the weights, so it has to wait for any load
+    // or generation already in flight.
+    let precision = checkbox("Half Precision (f16)", state.app_settings.half_precision())
+        .size(16)
+        .text_size(13);
+    let precision = if state.generating || matches!(&state.model, ModelState::Loading) {
+        precision
+    } else {
+        precision.on_toggle(Message::ToggleHalfPrecision)
+    };
+
     sized_section(
         "Model",
         column![
@@ -97,6 +109,10 @@ fn model_panel(state: &State) -> Element<'_, Message> {
             .align_y(Alignment::Center)
             .spacing(theme::SPACE_SM),
             status,
+            precision,
+            text("Halves memory use. Speed gain depends on the CPU.")
+                .size(12)
+                .style(iced::widget::text::secondary),
         ]
         .spacing(theme::SPACE_SM)
         .into(),

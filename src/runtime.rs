@@ -18,16 +18,22 @@ use crate::core::tokenizer::vocab::MAX_TOKEN_SEQ;
 /// attention caches. The rest is headroom for the rest of the system.
 const CACHE_MEMORY_SHARE: usize = 2;
 
-/// Precision to load the checkpoint in, from `MIDI_MODEL_DTYPE`.
+/// Precision to load the checkpoint in.
 ///
 /// f16 halves both the resident model (933 MiB -> 466 MiB) and the bytes read
 /// per decode step. CPU generation is bound by that traffic rather than by
-/// arithmetic, so it is the one lever that moves the decode step directly.
-/// f32 stays the default: it is the reference precision `tests/parity.rs`
-/// checks, and f16 throughput depends on the CPU having native support.
-pub fn weight_dtype() -> DType {
+/// arithmetic, so it is the one lever that moves the decode step directly. f32
+/// is the reference precision `tests/parity.rs` checks, and f16 throughput
+/// depends on the CPU having usable native support -- hence a user choice
+/// rather than a default.
+///
+/// `MIDI_MODEL_DTYPE` overrides `half_precision`, which is how the benchmark
+/// and the heavy tests pick a precision without going through the interface.
+pub fn weight_dtype(half_precision: bool) -> DType {
     match std::env::var("MIDI_MODEL_DTYPE").as_deref() {
         Ok("f16") => DType::F16,
+        Ok("f32") => DType::F32,
+        _ if half_precision => DType::F16,
         _ => DType::F32,
     }
 }

@@ -21,7 +21,8 @@ fn bench_batched_generation() {
     let device = Device::Cpu;
     let config = ModelConfig::from_json(assets::CONFIG_JSON).unwrap();
     let load_start = Instant::now();
-    let model = MidiModel::load(config, device, gen_music_ai::runtime::weight_dtype()).unwrap();
+    let model =
+        MidiModel::load(config, device, gen_music_ai::runtime::weight_dtype(false)).unwrap();
     eprintln!("model load: {:.1}s", load_start.elapsed().as_secs_f64());
 
     let batch = 4usize;

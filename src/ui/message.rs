@@ -30,6 +30,7 @@ pub enum Message {
     // Model
     LoadModel,
     ModelLoaded(Result<Hidden<Arc<MidiModel>>, String>),
+    ToggleHalfPrecision(bool),
 
     // Form
     Form(FormMsg),

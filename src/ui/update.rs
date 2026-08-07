@@ -23,7 +23,7 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
             }
             state.model = ModelState::Loading;
             state.status = "Loading the model into memory…".to_string();
-            return tasks::load_model();
+            return tasks::load_model(state.app_settings.half_precision());
         }
         Message::ModelLoaded(Ok(Hidden(model))) => {
             state.model = ModelState::Ready(model);
@@ -32,6 +32,19 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
         Message::ModelLoaded(Err(error)) => {
             state.status = format!("Failed to load the model: {error}");
             state.model = ModelState::Failed(error);
+        }
+        Message::ToggleHalfPrecision(enabled) => {
+            if state.generating || matches!(state.model, ModelState::Loading) {
+                return Task::none();
+            }
+            state.app_settings.set_half_precision(enabled);
+            // Precision is baked into the weights at load time, so an already
+            // loaded model has to be dropped and read again.
+            if matches!(state.model, ModelState::Ready(_)) {
+                state.model = ModelState::Loading;
+                state.status = "Reloading the model at the new precision…".to_string();
+                return tasks::load_model(enabled);
+            }
         }
 
         Message::Form(form) => apply_form(state, form),

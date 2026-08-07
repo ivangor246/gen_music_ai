@@ -55,13 +55,14 @@ the model weights are converted to `f32` for CPU inference. Larger result counts
 memory settings increase peak memory use. Generation speed depends on the CPU and selected
 settings.
 
-On a machine short on memory, set `MIDI_MODEL_DTYPE=f16` to load the checkpoint in half
-precision. This halves both the resident weights (about 933 MB down to 466 MB) and the
-attention caches. Decoding is bound by how many bytes of weights are read per event rather
-than by arithmetic, so this is also the setting that most directly affects speed — though the
-gain depends on the CPU having usable `f16` support, so it is worth timing on your own machine.
-Output differs slightly from `f32`, which remains the default and the precision the parity test
-checks.
+On a machine short on memory, enable **Half Precision (f16)** in the Model panel. This halves
+both the resident weights (about 933 MB down to 466 MB) and the attention caches. Decoding is
+bound by how many bytes of weights are read per event rather than by arithmetic, so this is
+also the setting that most directly affects speed — though the gain depends on the CPU having
+usable `f16` support, so it is worth timing on your own machine. Output differs slightly from
+`f32`, which remains the default and the precision the parity test checks. The choice persists
+between sessions, and toggling it reloads an already-loaded model. `MIDI_MODEL_DTYPE=f16` or
+`=f32` overrides it, which is how the benchmark selects a precision.
 
 The app caps tensor-math threads at half the logical cores so the desktop stays responsive, and
 refuses a run whose attention caches would not fit in available memory instead of swapping.

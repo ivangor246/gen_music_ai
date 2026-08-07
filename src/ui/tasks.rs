@@ -31,18 +31,15 @@ where
     Task::stream(stream)
 }
 
-/// Load the model from the configured checkpoint.
-pub fn load_model() -> Task<Message> {
-    run_once(|| {
+/// Load the model from the configured checkpoint at the chosen precision.
+pub fn load_model(half_precision: bool) -> Task<Message> {
+    run_once(move || {
+        let dtype = crate::runtime::weight_dtype(half_precision);
         let result = ModelConfig::from_json(crate::assets::CONFIG_JSON)
             .map_err(|error| error.to_string())
             .and_then(|config| {
-                MidiModel::load(
-                    config,
-                    candle_core::Device::Cpu,
-                    crate::runtime::weight_dtype(),
-                )
-                .map_err(|error| error.to_string())
+                MidiModel::load(config, candle_core::Device::Cpu, dtype)
+                    .map_err(|error| error.to_string())
             });
         Message::ModelLoaded(result.map(|model| Hidden(Arc::new(model))))
     })
