@@ -192,6 +192,12 @@ impl TokenStore {
         self.last_tick
     }
 
+    /// Tick the music actually stops at, covering the ring-out of the longest
+    /// note. This is the right length to export a partial track at.
+    pub fn end_tick(&self) -> i64 {
+        self.end_tick
+    }
+
     pub fn path(&self) -> &Path {
         &self.path
     }

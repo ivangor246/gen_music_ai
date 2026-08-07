@@ -128,19 +128,23 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
                 .iter()
                 .map(track_duration)
                 .collect::<Result<Vec<_>, _>>();
+            let outcome = if output.cancelled {
+                "Generation stopped early"
+            } else {
+                "Generation complete"
+            };
             state.results = output.tracks;
             match durations {
                 Ok(durations) => {
                     state.result_durations = durations;
-                    state.status = "Generation complete.".to_string();
+                    state.status = format!("{outcome}.");
                     if !state.results.is_empty() {
                         return update(state, Message::SelectResult(0));
                     }
                 }
                 Err(error) => {
                     state.result_durations.clear();
-                    state.status =
-                        format!("Generation complete, but results are unavailable: {error}");
+                    state.status = format!("{outcome}, but results are unavailable: {error}");
                 }
             }
         }

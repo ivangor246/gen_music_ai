@@ -71,6 +71,8 @@ pub struct GeneratedTrack {
 pub struct GenerationOutput {
     pub tracks: Vec<GeneratedTrack>,
     pub seed: u64,
+    /// The run stopped on request, so the tracks are shorter than asked for.
+    pub cancelled: bool,
 }
 
 pub fn generate(
@@ -147,9 +149,17 @@ pub fn generate(
     };
     run_batches(&ctx, &mut tracks, &mut rng, cancel, &mut progress)?;
 
+    let cancelled = cancel.load(Ordering::Relaxed);
     let mut outputs = Vec::with_capacity(tracks.len());
     for track in tracks {
-        let target_tick = track.target_tick;
+        // A cancelled run stops part-way, so its tracks end where the music
+        // does. Reporting the requested length instead would pad every export
+        // with silence and show the full duration in the UI.
+        let target_tick = if cancelled {
+            track.store.end_tick()
+        } else {
+            track.target_tick
+        };
         let token_path = track.store.finish()?;
         outputs.push(GeneratedTrack {
             token_path,
@@ -159,6 +169,7 @@ pub fn generate(
     Ok(GenerationOutput {
         tracks: outputs,
         seed,
+        cancelled,
     })
 }
 
