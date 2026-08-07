@@ -208,6 +208,86 @@ impl<I: Iterator<Item = TokenRow>> ActionStream<I> {
     }
 }
 
+/// Cut a stream of actions off at `limit`, closing notes that are still
+/// sounding instead of dropping their note-offs.
+///
+/// `ActionStream` drains pending note-offs last, in tick order, so stopping at
+/// the first action past the limit throws away the offs of notes whose on was
+/// already emitted -- and a note-on with no matching off hangs for good.
+pub struct Truncated<I> {
+    inner: I,
+    limit: Option<i64>,
+    /// Notes currently sounding, in the order they started, so the closing offs
+    /// come out deterministically.
+    active: Vec<(u16, u8, u8)>,
+    closing: std::vec::IntoIter<TimedAction>,
+    done: bool,
+}
+
+impl<I: Iterator<Item = TimedAction>> Truncated<I> {
+    pub fn new(inner: I, limit: Option<i64>) -> Self {
+        Self {
+            inner,
+            limit,
+            active: Vec::new(),
+            closing: Vec::new().into_iter(),
+            done: false,
+        }
+    }
+
+    fn close_active(&mut self, tick: i64) {
+        let offs: Vec<TimedAction> = self
+            .active
+            .drain(..)
+            .map(|(track, channel, pitch)| TimedAction {
+                tick,
+                track,
+                action: Action::NoteOff { channel, pitch },
+            })
+            .collect();
+        self.closing = offs.into_iter();
+    }
+}
+
+impl<I: Iterator<Item = TimedAction>> Iterator for Truncated<I> {
+    type Item = TimedAction;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(action) = self.closing.next() {
+            return Some(action);
+        }
+        if self.done {
+            return None;
+        }
+        let Some(limit) = self.limit else {
+            return self.inner.next();
+        };
+        let Some(timed) = self.inner.next() else {
+            self.done = true;
+            return None;
+        };
+        if timed.tick > limit {
+            self.done = true;
+            self.close_active(limit);
+            return self.closing.next();
+        }
+        match timed.action {
+            Action::NoteOn { channel, pitch, .. } => {
+                let key = (timed.track, channel, pitch);
+                if !self.active.contains(&key) {
+                    self.active.push(key);
+                }
+            }
+            Action::NoteOff { channel, pitch } => {
+                self.active
+                    .retain(|entry| entry != &(timed.track, channel, pitch));
+            }
+            _ => {}
+        }
+        Some(timed)
+    }
+}
+
 impl<I: Iterator<Item = TokenRow>> Iterator for ActionStream<I> {
     type Item = TimedAction;
 
@@ -251,5 +331,67 @@ impl<I: Iterator<Item = TokenRow>> Iterator for ActionStream<I> {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::tokenizer::codec::event_to_tokens;
+
+    fn note(time1: u16, pitch: u16, duration: u16) -> TokenRow {
+        let event = Event::new(EventType::Note, vec![time1, 0, 0, 0, pitch, 100, duration]);
+        event_to_tokens(&event).unwrap()
+    }
+
+    fn actions(rows: Vec<TokenRow>, limit: Option<i64>) -> Vec<TimedAction> {
+        Truncated::new(ActionStream::new(rows.into_iter()), limit).collect()
+    }
+
+    #[test]
+    fn a_note_still_sounding_at_the_limit_is_closed_there() {
+        // Onset at tick 480, four quarters long, so it would ring out at 2400 --
+        // well past a limit of 960.
+        let stream = actions(vec![note(1, 60, 64)], Some(960));
+        let offs: Vec<&TimedAction> = stream
+            .iter()
+            .filter(|timed| matches!(timed.action, Action::NoteOff { .. }))
+            .collect();
+        assert_eq!(offs.len(), 1, "the note-on must get a matching off");
+        assert_eq!(offs[0].tick, 960, "and it must land on the limit");
+    }
+
+    #[test]
+    fn every_note_on_is_matched_even_when_truncated() {
+        let rows = vec![note(0, 60, 2047), note(1, 64, 512), note(1, 67, 8)];
+        let stream = actions(rows, Some(960));
+        let ons = stream
+            .iter()
+            .filter(|timed| matches!(timed.action, Action::NoteOn { .. }))
+            .count();
+        let offs = stream
+            .iter()
+            .filter(|timed| matches!(timed.action, Action::NoteOff { .. }))
+            .count();
+        assert_eq!(ons, offs);
+        assert!(stream.iter().all(|timed| timed.tick <= 960));
+    }
+
+    #[test]
+    fn notes_that_end_before_the_limit_are_not_closed_twice() {
+        // One sixteenth long at tick 0, so its off arrives at 30, far inside.
+        let stream = actions(vec![note(0, 60, 1)], Some(960));
+        let offs = stream
+            .iter()
+            .filter(|timed| matches!(timed.action, Action::NoteOff { .. }))
+            .count();
+        assert_eq!(offs, 1);
+    }
+
+    #[test]
+    fn without_a_limit_the_stream_passes_through() {
+        let rows = vec![note(0, 60, 64), note(1, 64, 16)];
+        let plain: Vec<TimedAction> = ActionStream::new(rows.clone().into_iter()).collect();
+        assert_eq!(actions(rows, None), plain);
     }
 }

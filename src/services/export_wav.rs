@@ -8,7 +8,7 @@ use std::path::Path;
 use anyhow::Result;
 use hound::{SampleFormat, WavSpec, WavWriter};
 
-use crate::core::midi::score::{Action, ActionStream, TICKS_PER_QUARTER, TimedAction};
+use crate::core::midi::score::{Action, ActionStream, TICKS_PER_QUARTER, TimedAction, Truncated};
 use crate::services::atomic::atomic_write;
 use crate::services::synth::{OxiSynth, SAMPLE_RATE, SynthEngine};
 use crate::services::token_store::read_rows;
@@ -50,12 +50,9 @@ fn render<W: Write + std::io::Seek>(
     let mut fractional = 0.0f64;
     let mut scratch: Vec<i16> = Vec::new();
 
-    for TimedAction { tick, action, .. } in ActionStream::new(rows.iter().copied()) {
-        if let Some(limit) = target_tick
-            && tick > limit
-        {
-            break;
-        }
+    for TimedAction { tick, action, .. } in
+        Truncated::new(ActionStream::new(rows.iter().copied()), target_tick)
+    {
         let elapsed = (tick - current_tick).max(0);
         let exact = frames_for_ticks(elapsed, current_tempo) + fractional;
         let frames = exact as usize;

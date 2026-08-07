@@ -1,7 +1,7 @@
 //! Timeline in seconds for playback and the density visualization, built
 //! directly from generated token rows.
 
-use crate::core::midi::score::{Action, ActionStream, TICKS_PER_QUARTER, TimedAction};
+use crate::core::midi::score::{Action, ActionStream, TICKS_PER_QUARTER, TimedAction, Truncated};
 use crate::core::tokenizer::codec::TokenRow;
 
 const DEFAULT_TEMPO: u32 = 500_000;
@@ -25,12 +25,8 @@ impl Timeline {
         let mut current_tempo = DEFAULT_TEMPO;
         let mut seconds = 0.0f64;
 
-        for TimedAction { tick, action, .. } in ActionStream::new(rows) {
-            if let Some(limit) = target_tick
-                && tick > limit
-            {
-                break;
-            }
+        for TimedAction { tick, action, .. } in Truncated::new(ActionStream::new(rows), target_tick)
+        {
             let tick = current_tick.max(tick);
             seconds += ticks_to_seconds(tick - current_tick, current_tempo);
             current_tick = tick;

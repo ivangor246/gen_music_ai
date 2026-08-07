@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 use std::io::{self, Write};
 
-use super::score::{Action, TICKS_PER_QUARTER, TimedAction};
+use super::score::{Action, TICKS_PER_QUARTER, TimedAction, Truncated};
 
 #[derive(Default)]
 struct TrackBuffer {
@@ -22,12 +22,7 @@ pub fn write_midi(
     let mut tracks: BTreeMap<u16, TrackBuffer> = BTreeMap::new();
     let mut global_tick = 0i64;
 
-    for timed in actions {
-        if let Some(limit) = target_tick
-            && timed.tick > limit
-        {
-            break;
-        }
+    for timed in Truncated::new(actions, target_tick) {
         let tick = global_tick.max(timed.tick);
         global_tick = tick;
         if let Some(message) = message_bytes(&timed.action) {
