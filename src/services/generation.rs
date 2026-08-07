@@ -86,9 +86,7 @@ pub fn generate(
     };
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
 
-    let context_window = resolve_context_window(settings.context_window);
-    let section_size = (context_window / 4).clamp(16, 128);
-    let prompt_size = context_window.saturating_sub(section_size).max(32);
+    let (prompt_size, section_size) = split_context(settings.context_window);
     let target_ticks = settings.target_ticks();
     let max_events = (settings.event_count() * 16).max(settings.bars * 128) as usize;
     let params = SamplingParams {
@@ -499,12 +497,21 @@ fn build_initial_prompt(settings: &GenerationSettings) -> (Vec<TokenRow>, Vec<u1
     (rows, disabled, !settings.instruments.is_empty())
 }
 
-fn resolve_context_window(requested: u32) -> u32 {
-    if requested > 0 {
+/// Split the context window into (prompt, section): how many events prime a
+/// section and how many it then generates.
+///
+/// The base net re-runs over the prompt at every section boundary, so the
+/// section length is what that prefill buys. An even split costs one prefill per
+/// section's worth of decoded events; the previous quarter/three-quarters split
+/// paid three prefilled events for every generated one.
+fn split_context(requested: u32) -> (u32, u32) {
+    let window = if requested > 0 {
         requested.clamp(128, 4096)
     } else {
         512
-    }
+    };
+    let section = window / 2;
+    (window - section, section)
 }
 
 fn timestamp() -> u128 {
@@ -512,4 +519,20 @@ fn timestamp() -> u128 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn context_splits_evenly_between_prompt_and_decode() {
+        assert_eq!(split_context(0), (256, 256)); // 0 means "use the default"
+        assert_eq!(split_context(512), (256, 256));
+        assert_eq!(split_context(128), (64, 64));
+        assert_eq!(split_context(4096), (2048, 2048));
+        // Requests outside the supported range clamp into it.
+        assert_eq!(split_context(10), (64, 64));
+        assert_eq!(split_context(100_000), (2048, 2048));
+    }
 }
