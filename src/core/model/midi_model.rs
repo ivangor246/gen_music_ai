@@ -15,13 +15,17 @@ pub struct MidiModel {
     lm_head: Linear,
     config: ModelConfig,
     device: Device,
+    dtype: DType,
 }
 
 impl MidiModel {
-    pub fn load(config: ModelConfig, device: Device) -> Result<Self> {
-        let tensors = weights::load_tensors(&device)
+    /// Load the checkpoint in `dtype`. f16 halves both the resident weights and
+    /// the bytes read per decode step, which is what CPU generation is bound by;
+    /// f32 is the reference precision `tests/parity.rs` checks.
+    pub fn load(config: ModelConfig, device: Device, dtype: DType) -> Result<Self> {
+        let tensors = weights::load_tensors(&device, dtype)
             .map_err(|e| candle_core::Error::Msg(format!("loading weights: {e}")))?;
-        let vb = VarBuilder::from_tensors(tensors, DType::F32, &device);
+        let vb = VarBuilder::from_tensors(tensors, dtype, &device);
         let base = LlamaStack::new(&config.net, &device, vb.pp("net"))?;
         let token = LlamaStack::new(&config.net_token, &device, vb.pp("net_token"))?;
         let lm_head = candle_nn::linear_no_bias(
@@ -35,6 +39,7 @@ impl MidiModel {
             lm_head,
             config,
             device,
+            dtype,
         })
     }
 
@@ -44,6 +49,11 @@ impl MidiModel {
 
     pub fn device(&self) -> &Device {
         &self.device
+    }
+
+    /// Precision of the weights and, in turn, of the attention caches.
+    pub fn dtype(&self) -> DType {
+        self.dtype
     }
 
     /// Cache for the base net, preallocated for `capacity` events.
@@ -81,9 +91,13 @@ impl MidiModel {
         self.token_logits(&embeds, cache)
     }
 
+    /// Logits come back as f32 whatever the weights are, so sampling stays
+    /// identical across precisions.
     fn token_logits(&self, embeds: &Tensor, cache: &mut StackCache) -> Result<Tensor> {
         let hidden = self.token.forward(embeds, cache)?;
-        self.lm_head.forward(&last_position(&hidden)?)
+        self.lm_head
+            .forward(&last_position(&hidden)?)?
+            .to_dtype(DType::F32)
     }
 }
 
@@ -97,7 +111,7 @@ mod tests {
         let _guard = super::super::HEAVY_TEST_LOCK.lock().unwrap();
         let config = ModelConfig::from_json(assets::CONFIG_JSON).unwrap();
         let device = Device::Cpu;
-        let model = MidiModel::load(config, device.clone()).unwrap();
+        let model = MidiModel::load(config, device.clone(), DType::F32).unwrap();
 
         // 1 batch, 2 events (bos row + a set_tempo-shaped row), 8 sub-tokens each.
         let ids = Tensor::from_vec(

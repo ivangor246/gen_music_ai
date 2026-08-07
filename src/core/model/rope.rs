@@ -5,7 +5,7 @@
 //! contiguous halves -> candle's `rotary_emb::rope` (not the interleaved
 //! `rope_i`). Each stack has its own table because head_dim differs (64 vs 256).
 
-use candle_core::{Device, Result, Tensor};
+use candle_core::{DType, Device, Result, Tensor};
 
 pub struct RotaryCache {
     cos: Tensor,
@@ -13,7 +13,13 @@ pub struct RotaryCache {
 }
 
 impl RotaryCache {
-    pub fn new(head_dim: usize, max_positions: usize, theta: f64, device: &Device) -> Result<Self> {
+    pub fn new(
+        head_dim: usize,
+        max_positions: usize,
+        theta: f64,
+        dtype: DType,
+        device: &Device,
+    ) -> Result<Self> {
         let half = head_dim / 2;
         let inv_freq: Vec<f32> = (0..half)
             .map(|i| (1.0 / theta.powf(2.0 * i as f64 / head_dim as f64)) as f32)
@@ -27,9 +33,10 @@ impl RotaryCache {
                 sin.push(angle.sin());
             }
         }
+        // Kept in the model's dtype so `rope` never has to convert per step.
         Ok(Self {
-            cos: Tensor::from_vec(cos, (max_positions, half), device)?,
-            sin: Tensor::from_vec(sin, (max_positions, half), device)?,
+            cos: Tensor::from_vec(cos, (max_positions, half), device)?.to_dtype(dtype)?,
+            sin: Tensor::from_vec(sin, (max_positions, half), device)?.to_dtype(dtype)?,
         })
     }
 

@@ -177,6 +177,7 @@ impl LlamaStack {
             config.head_dim(),
             config.max_position_embeddings,
             ROPE_THETA,
+            vb.dtype(),
             device,
         )?;
         Ok(Self {

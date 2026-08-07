@@ -99,6 +99,7 @@ pub fn generate(
         model.config(),
         request.batch_size,
         (prompt_size + section_size) as usize,
+        model.dtype(),
     )?;
     let target_ticks = settings.target_ticks();
     let max_events = (settings.event_count() * 16).max(settings.bars * 128) as usize;

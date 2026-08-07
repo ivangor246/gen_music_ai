@@ -9,15 +9,28 @@
 use std::sync::OnceLock;
 
 use anyhow::{Result, bail};
+use candle_core::DType;
 
 use crate::core::model::config::{LlamaConfig, ModelConfig};
 use crate::core::tokenizer::vocab::MAX_TOKEN_SEQ;
 
-/// Caches are held as f32, matching the runtime dtype.
-const CACHE_DTYPE_BYTES: usize = 4;
 /// A run may claim at most this fraction of still-available memory for its
 /// attention caches. The rest is headroom for the rest of the system.
 const CACHE_MEMORY_SHARE: usize = 2;
+
+/// Precision to load the checkpoint in, from `MIDI_MODEL_DTYPE`.
+///
+/// f16 halves both the resident model (933 MiB -> 466 MiB) and the bytes read
+/// per decode step. CPU generation is bound by that traffic rather than by
+/// arithmetic, so it is the one lever that moves the decode step directly.
+/// f32 stays the default: it is the reference precision `tests/parity.rs`
+/// checks, and f16 throughput depends on the CPU having native support.
+pub fn weight_dtype() -> DType {
+    match std::env::var("MIDI_MODEL_DTYPE").as_deref() {
+        Ok("f16") => DType::F16,
+        _ => DType::F32,
+    }
+}
 
 static THREADS: OnceLock<usize> = OnceLock::new();
 
@@ -70,24 +83,30 @@ pub fn available_memory() -> Option<usize> {
 
 /// Bytes the attention caches hold for a run: keys and values, for every layer
 /// of both stacks, over the full context window, for every track in the batch.
-pub fn cache_bytes(config: &ModelConfig, batch: usize, context: usize) -> usize {
-    stack_cache_bytes(&config.net, batch, context)
-        + stack_cache_bytes(&config.net_token, batch, MAX_TOKEN_SEQ)
+/// The caches inherit the model's dtype.
+pub fn cache_bytes(config: &ModelConfig, batch: usize, context: usize, dtype: DType) -> usize {
+    stack_cache_bytes(&config.net, batch, context, dtype)
+        + stack_cache_bytes(&config.net_token, batch, MAX_TOKEN_SEQ, dtype)
 }
 
-fn stack_cache_bytes(config: &LlamaConfig, batch: usize, positions: usize) -> usize {
+fn stack_cache_bytes(config: &LlamaConfig, batch: usize, positions: usize, dtype: DType) -> usize {
     2 * config.num_hidden_layers
         * batch
         * config.num_attention_heads
         * positions
         * config.head_dim()
-        * CACHE_DTYPE_BYTES
+        * dtype.size_in_bytes()
 }
 
 /// Refuse a run whose caches would not fit rather than letting the machine swap
 /// itself to a standstill. Platforms that cannot report free memory are trusted.
-pub fn check_cache_budget(config: &ModelConfig, batch: usize, context: usize) -> Result<()> {
-    let needed = cache_bytes(config, batch, context);
+pub fn check_cache_budget(
+    config: &ModelConfig,
+    batch: usize,
+    context: usize,
+    dtype: DType,
+) -> Result<()> {
+    let needed = cache_bytes(config, batch, context, dtype);
     let Some(available) = available_memory() else {
         return Ok(());
     };
@@ -130,17 +149,26 @@ mod tests {
         let base = 2 * 12 * 4 * 16 * 512 * 64 * 4;
         // token net: 3 layers, 4 heads, 8 positions, 256 dim
         let token = 2 * 3 * 4 * 4 * MAX_TOKEN_SEQ * 256 * 4;
-        assert_eq!(cache_bytes(&config(), 4, 512), base + token);
+        assert_eq!(cache_bytes(&config(), 4, 512, DType::F32), base + token);
     }
 
     #[test]
     fn cache_size_scales_with_batch_and_context() {
         let config = config();
-        let single = cache_bytes(&config, 1, 512);
-        assert_eq!(cache_bytes(&config, 4, 512), 4 * single);
+        let single = cache_bytes(&config, 1, 512, DType::F32);
+        assert_eq!(cache_bytes(&config, 4, 512, DType::F32), 4 * single);
         // Only the base stack grows with the context window.
-        let wide = cache_bytes(&config, 1, 1024);
+        let wide = cache_bytes(&config, 1, 1024, DType::F32);
         assert!(wide > single && wide < 2 * single);
+    }
+
+    #[test]
+    fn half_precision_halves_the_cache() {
+        let config = config();
+        assert_eq!(
+            cache_bytes(&config, 4, 512, DType::F16) * 2,
+            cache_bytes(&config, 4, 512, DType::F32)
+        );
     }
 
     #[test]
@@ -149,7 +177,7 @@ mod tests {
         if available_memory().is_none() {
             return;
         }
-        assert!(check_cache_budget(&config(), 4, 512).is_ok());
-        assert!(check_cache_budget(&config(), 4096, 4096).is_err());
+        assert!(check_cache_budget(&config(), 4, 512, DType::F32).is_ok());
+        assert!(check_cache_budget(&config(), 4096, 4096, DType::F32).is_err());
     }
 }

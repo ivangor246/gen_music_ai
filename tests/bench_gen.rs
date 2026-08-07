@@ -21,7 +21,7 @@ fn bench_batched_generation() {
     let device = Device::Cpu;
     let config = ModelConfig::from_json(assets::CONFIG_JSON).unwrap();
     let load_start = Instant::now();
-    let model = MidiModel::load(config, device).unwrap();
+    let model = MidiModel::load(config, device, gen_music_ai::runtime::weight_dtype()).unwrap();
     eprintln!("model load: {:.1}s", load_start.elapsed().as_secs_f64());
 
     let batch = 4usize;
@@ -67,8 +67,17 @@ fn describe(track: &GeneratedTrack) {
     let rows = read_rows(&track.token_path).unwrap();
     let events: Vec<Event> = rows.iter().filter_map(|row| tokens_to_event(row)).collect();
     let quarters: i64 = events.iter().map(|e| i64::from(e.params[0])).sum();
-    let kinds: Vec<&str> = events.iter().map(|e| e.kind.name()).collect();
     let deltas: Vec<u16> = events.iter().map(|e| e.params[0]).collect();
+    // Show what each event carries, so a run of identical control changes is
+    // distinguishable from a legitimate channel setup sweep.
+    let detail: Vec<String> = events
+        .iter()
+        .map(|e| match e.kind.name() {
+            "note" => format!("note p{} v{} d{}", e.params[4], e.params[5], e.params[6]),
+            "control_change" => format!("cc {}={}", e.params[4], e.params[5]),
+            other => other.to_string(),
+        })
+        .collect();
 
     eprintln!(
         "track 1: {} events, onset {} ticks of {} target",
@@ -76,6 +85,6 @@ fn describe(track: &GeneratedTrack) {
         quarters * 480,
         track.target_tick,
     );
-    eprintln!("  kinds:  {kinds:?}");
+    eprintln!("  events: {detail:?}");
     eprintln!("  time1:  {deltas:?}");
 }

@@ -9,28 +9,30 @@
 use std::collections::HashMap;
 
 use anyhow::{Context, Result};
-use candle_core::{Device, Tensor};
-use half::bf16;
+use candle_core::{DType, Device, Tensor};
+use half::{bf16, f16};
 use safetensors::SafeTensors;
 use safetensors::tensor::{Dtype, TensorView};
 
 use crate::assets;
 
-/// Load every tensor as f32 on the given device, keyed by its checkpoint name.
-pub fn load_tensors(device: &Device) -> Result<HashMap<String, Tensor>> {
+/// Load every tensor in `dtype` on the given device, keyed by its checkpoint
+/// name. Conversion happens one tensor at a time, so the peak stays at the
+/// asset plus the converted model rather than holding both dtypes in full.
+pub fn load_tensors(device: &Device, dtype: DType) -> Result<HashMap<String, Tensor>> {
     let bytes = assets::model_safetensors()?;
     let safetensors =
         SafeTensors::deserialize(bytes.as_ref()).context("parsing model.safetensors")?;
     let mut tensors = HashMap::new();
     for (name, view) in safetensors.tensors() {
-        let tensor =
-            view_to_f32(&view, device).with_context(|| format!("loading tensor `{name}`"))?;
+        let tensor = view_to_tensor(&view, dtype, device)
+            .with_context(|| format!("loading tensor `{name}`"))?;
         tensors.insert(name, tensor);
     }
     Ok(tensors)
 }
 
-fn view_to_f32(view: &TensorView, device: &Device) -> Result<Tensor> {
+fn view_to_tensor(view: &TensorView, dtype: DType, device: &Device) -> Result<Tensor> {
     let shape = view.shape().to_vec();
     let data = view.data();
     let values: Vec<f32> = match view.dtype() {
@@ -44,7 +46,13 @@ fn view_to_f32(view: &TensorView, device: &Device) -> Result<Tensor> {
             .collect(),
         other => anyhow::bail!("unsupported tensor dtype {other:?}"),
     };
-    Ok(Tensor::from_vec(values, shape, device)?)
+    Ok(match dtype {
+        DType::F16 => {
+            let half: Vec<f16> = values.into_iter().map(f16::from_f32).collect();
+            Tensor::from_vec(half, shape, device)?
+        }
+        _ => Tensor::from_vec(values, shape, device)?,
+    })
 }
 
 #[cfg(all(test, feature = "heavy-tests"))]
@@ -55,7 +63,7 @@ mod tests {
     fn loads_expected_tensors() {
         let _guard = super::super::HEAVY_TEST_LOCK.lock().unwrap();
         let device = Device::Cpu;
-        let tensors = load_tensors(&device).unwrap();
+        let tensors = load_tensors(&device, DType::F32).unwrap();
 
         // 110 base-net + 29 token-net + lm_head = 140 tensors.
         assert_eq!(tensors.len(), 140);

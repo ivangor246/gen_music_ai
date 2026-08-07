@@ -17,7 +17,7 @@ use gen_music_ai::settings::{GenerationRequest, GenerationSettings};
 fn generates_valid_tokens() {
     let device = Device::Cpu;
     let config = ModelConfig::from_json(assets::CONFIG_JSON).unwrap();
-    let model = MidiModel::load(config, device).unwrap();
+    let model = MidiModel::load(config, device, gen_music_ai::runtime::weight_dtype()).unwrap();
 
     let dir = std::env::temp_dir().join(format!("midi_gen_test_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();

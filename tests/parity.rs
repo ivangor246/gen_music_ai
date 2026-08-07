@@ -55,7 +55,7 @@ fn candle_forward_matches_torch_f32() {
 
     let device = Device::Cpu;
     let config = ModelConfig::from_json(assets::CONFIG_JSON).unwrap();
-    let model = MidiModel::load(config, device.clone()).unwrap();
+    let model = MidiModel::load(config, device.clone(), candle_core::DType::F32).unwrap();
 
     let events = fixture.prompt.len();
     let flat: Vec<u32> = fixture.prompt.iter().flatten().copied().collect();
