@@ -1,6 +1,7 @@
 //! Headless CPU generation with sliding-context sections, constrained per-slot
 //! sampling, stop conditions, and cancellation.
 
+use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -10,16 +11,18 @@ use candle_core::{Device, Tensor};
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 
-use crate::core::constraints::{DecodeFlags, allowed_event_ids, allowed_param_ids};
+use crate::core::constraints::DecodeFlags;
 use crate::core::midi::gm;
 use crate::core::model::kv_cache::StackCache;
 use crate::core::model::midi_model::MidiModel;
 use crate::core::sampler::{
-    apply_mask, apply_repetition_penalty, no_repeat_ngram_bans, sample_top_p_k, softmax_with_temp,
+    SamplingParams, TokenHistory, no_repeat_ngram_bans, sample_constrained,
 };
 use crate::core::tokenizer::codec::{Event, TokenRow, bos_row, event_to_tokens};
 use crate::core::tokenizer::events::EventType;
-use crate::core::tokenizer::vocab::{BOS_ID, EOS_ID, MAX_TOKEN_SEQ, PAD_ID, event_type_from_id};
+use crate::core::tokenizer::vocab::{
+    BOS_ID, EOS_ID, MAX_TOKEN_SEQ, PAD_ID, VOCAB_SIZE, event_type_from_id,
+};
 use crate::services::token_store::TokenStore;
 use crate::settings::{AUTO_VALUE, GenerationRequest, GenerationSettings};
 
@@ -44,19 +47,13 @@ pub fn drum_kit_program(name: &str) -> i32 {
     }
 }
 
-struct DecodeParams {
-    temperature: f32,
-    top_p: f32,
-    top_k: usize,
-}
-
 /// EOS stays masked out until a track has covered this fraction of its target
 /// length, so the model can't end far short of the requested bar count.
 const EOS_MIN_PROGRESS: f64 = 0.9;
 /// How many recently-sampled raw token ids feed the repetition penalty and
 /// n-gram guard, per track. Bounded so it stays cheap on weak devices.
 const REPETITION_WINDOW: usize = 200;
-/// Repetition penalty strength (1.0 = disabled). See `apply_repetition_penalty`.
+/// Repetition penalty strength (1.0 = disabled). See `sample_constrained`.
 const REPETITION_PENALTY: f32 = 1.3;
 /// n-gram size for the no-repeat guard: if the last `NGRAM_BAN_SIZE - 1` raw
 /// ids already occurred earlier, the id that followed them there is banned.
@@ -94,7 +91,7 @@ pub fn generate(
     let prompt_size = context_window.saturating_sub(section_size).max(32);
     let target_ticks = settings.target_ticks();
     let max_events = (settings.event_count() * 16).max(settings.bars * 128) as usize;
-    let params = DecodeParams {
+    let params = SamplingParams {
         temperature: settings.temperature,
         top_p: settings.top_p,
         top_k: settings.top_k,
@@ -126,7 +123,7 @@ pub fn generate(
             max_events,
             generated: 0,
             done: false,
-            history: Vec::new(),
+            history: TokenHistory::new(VOCAB_SIZE as usize, REPETITION_WINDOW),
         });
     }
 
@@ -168,7 +165,7 @@ struct TrackGen {
     done: bool,
     /// Recent raw token ids (bounded to `REPETITION_WINDOW`), used to steer
     /// this track away from looping the same phrase.
-    history: Vec<u32>,
+    history: TokenHistory,
 }
 
 impl TrackGen {
@@ -191,7 +188,7 @@ fn run_batches(
     section_size: usize,
     prompt_size: usize,
     flags: &DecodeFlags,
-    params: &DecodeParams,
+    params: &SamplingParams,
     rng: &mut ChaCha8Rng,
     cancel: &AtomicBool,
     total_work: i64,
@@ -249,9 +246,9 @@ fn run_batches(
                     progress >= EOS_MIN_PROGRESS || track.generated + 1 >= track.max_events
                 })
                 .collect();
-            let history: Vec<&[u32]> = batch_idx
+            let history: Vec<&TokenHistory> = batch_idx
                 .iter()
-                .map(|&index| tracks[index].history.as_slice())
+                .map(|&index| &tracks[index].history)
                 .collect();
             let rows = sample_event_batch(
                 model,
@@ -271,15 +268,10 @@ fn run_batches(
                 } else if tracks[index].has_work() {
                     tracks[index].store.append(&row)?;
                     tracks[index].generated += 1;
-                    let track_history = &mut tracks[index].history;
-                    track_history.extend(
-                        row.iter()
-                            .map(|&value| value as u32)
-                            .filter(|&id| id != PAD_ID),
-                    );
-                    let excess = track_history.len().saturating_sub(REPETITION_WINDOW);
-                    if excess > 0 {
-                        track_history.drain(0..excess);
+                    for id in row.iter().map(|&value| value as u32) {
+                        if id != PAD_ID {
+                            tracks[index].history.push(id);
+                        }
                     }
                 }
             }
@@ -308,11 +300,11 @@ fn sample_event_batch(
     hidden: &Tensor,
     token_cache: &mut StackCache,
     flags: &DecodeFlags,
-    params: &DecodeParams,
+    params: &SamplingParams,
     rng: &mut ChaCha8Rng,
     batch: usize,
     allow_eos: &[bool],
-    history: &[&[u32]],
+    history: &[&TokenHistory],
 ) -> Result<Vec<TokenRow>> {
     let device = model.device().clone();
     token_cache.reset();
@@ -335,12 +327,15 @@ fn sample_event_batch(
                 continue;
             }
             let mut allowed = if slot == 0 {
-                allowed_event_ids(flags, allow_eos[item])
+                Cow::Borrowed(flags.event_ids(allow_eos[item]))
             } else {
-                allowed_param_ids(kinds[item].expect("event kind set at slot 0"), slot, flags)
+                // Slot 0 only ever draws an event id or eos, so a still-running
+                // item always has a kind by now.
+                let kind = kinds[item].expect("event kind set at slot 0");
+                Cow::Borrowed(flags.param_ids(kind, slot))
             };
             if slot == 0 {
-                let banned = no_repeat_ngram_bans(history[item], NGRAM_BAN_SIZE);
+                let banned = no_repeat_ngram_bans(history[item].ids(), NGRAM_BAN_SIZE);
                 if !banned.is_empty() {
                     let filtered: Vec<u32> = allowed
                         .iter()
@@ -349,15 +344,18 @@ fn sample_event_batch(
                         .collect();
                     // Never ban away every option; fall back to the unfiltered set.
                     if !filtered.is_empty() {
-                        allowed = filtered;
+                        allowed = Cow::Owned(filtered);
                     }
                 }
             }
-            let mut logits = rows_logits[item].clone();
-            apply_repetition_penalty(&mut logits, history[item], REPETITION_PENALTY);
-            let mut probs = softmax_with_temp(&logits, params.temperature);
-            apply_mask(&mut probs, &allowed);
-            let sample = sample_top_p_k(&probs, params.top_p, params.top_k, rng);
+            let sample = sample_constrained(
+                &rows_logits[item],
+                &allowed,
+                history[item],
+                REPETITION_PENALTY,
+                params,
+                rng,
+            );
             last_ids[item] = sample;
             if slot == 0 {
                 if sample == EOS_ID {
