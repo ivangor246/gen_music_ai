@@ -46,12 +46,14 @@ impl MidiModel {
         &self.device
     }
 
-    pub fn base_cache(&self) -> StackCache {
-        StackCache::new(self.config.net.num_hidden_layers)
+    /// Cache for the base net, preallocated for `capacity` events.
+    pub fn base_cache(&self, capacity: usize) -> StackCache {
+        StackCache::new(self.config.net.num_hidden_layers, capacity)
     }
 
-    pub fn token_cache(&self) -> StackCache {
-        StackCache::new(self.config.net_token.num_hidden_layers)
+    /// Cache for the token net, preallocated for `capacity` sub-tokens.
+    pub fn token_cache(&self, capacity: usize) -> StackCache {
+        StackCache::new(self.config.net_token.num_hidden_layers, capacity)
     }
 
     /// Base net over a run of events `ids` (b, seq, max_token_seq) of u32 sub-token
@@ -108,11 +110,11 @@ mod tests {
         )
         .unwrap();
 
-        let mut base_cache = model.base_cache();
+        let mut base_cache = model.base_cache(2);
         let hidden = model.base_forward(&ids, &mut base_cache).unwrap();
         assert_eq!(hidden.dims(), &[1, 1024]);
 
-        let mut token_cache = model.token_cache();
+        let mut token_cache = model.token_cache(8);
         let logits = model
             .token_logits_from_hidden(&hidden, &mut token_cache)
             .unwrap();

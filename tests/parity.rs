@@ -6,6 +6,7 @@ use serde::Deserialize;
 use gen_music_ai::assets;
 use gen_music_ai::core::model::config::ModelConfig;
 use gen_music_ai::core::model::midi_model::MidiModel;
+use gen_music_ai::core::tokenizer::vocab::MAX_TOKEN_SEQ;
 
 #[derive(Deserialize)]
 struct Fixture {
@@ -60,11 +61,11 @@ fn candle_forward_matches_torch_f32() {
     let flat: Vec<u32> = fixture.prompt.iter().flatten().copied().collect();
     let ids = Tensor::from_vec(flat, (1, events, 8), &device).unwrap();
 
-    let mut base_cache = model.base_cache();
+    let mut base_cache = model.base_cache(events);
     let hidden = model.base_forward(&ids, &mut base_cache).unwrap();
     let hidden_rs = to_vec(&hidden);
 
-    let mut token_cache = model.token_cache();
+    let mut token_cache = model.token_cache(MAX_TOKEN_SEQ);
     let logits0 = to_vec(
         &model
             .token_logits_from_hidden(&hidden, &mut token_cache)

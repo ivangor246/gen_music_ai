@@ -2,7 +2,7 @@
 //! by both the base net and the token net. No biases, no GQA (kv heads == heads
 //! for both configs). Weights are pulled from a `VarBuilder` with the HF layout.
 
-use candle_core::{Device, Result, Tensor};
+use candle_core::{DType, Device, Result, Tensor};
 use candle_nn::{Embedding, Linear, Module, RmsNorm, VarBuilder};
 
 use super::config::{LlamaConfig, RMS_NORM_EPS, ROPE_THETA};
@@ -46,6 +46,7 @@ impl Attention {
         rope: &RotaryCache,
         cache: &mut LayerKvCache,
         offset: usize,
+        mask: Option<&Tensor>,
     ) -> Result<Tensor> {
         let (b, seq, hidden) = x.dims3()?;
         let q = self.shape_heads(&self.q_proj.forward(x)?, b, seq)?;
@@ -54,21 +55,31 @@ impl Attention {
 
         let q = rope.apply(&q, offset)?;
         let k = rope.apply(&k, offset)?;
+        // Both come back as views over the layer's cache buffers; candle's cpu
+        // matmul reads their strides directly, so no `contiguous` copy is needed.
         let (k, v) = cache.append(&k, &v)?;
-        let total = k.dim(2)?;
 
-        let scores = (q.matmul(&k.transpose(2, 3)?.contiguous()?)? * self.scale)?;
-        let scores = scores.broadcast_add(&causal_mask(seq, total, offset, x.device())?)?;
+        let scores = (q.matmul(&k.transpose(2, 3)?)? * self.scale)?;
+        let scores = match mask {
+            Some(mask) => scores.broadcast_add(mask)?,
+            None => scores,
+        };
         let weights = candle_nn::ops::softmax_last_dim(&scores)?;
 
-        let out = weights.matmul(&v.contiguous()?)?;
+        let out = weights.matmul(&v)?;
         let out = out.transpose(1, 2)?.reshape((b, seq, hidden))?;
         self.o_proj.forward(&out)
     }
 }
 
 /// Additive causal mask (seq, total): query i is at absolute position offset+i.
-fn causal_mask(seq: usize, total: usize, offset: usize, device: &Device) -> Result<Tensor> {
+fn causal_mask(
+    seq: usize,
+    total: usize,
+    offset: usize,
+    dtype: DType,
+    device: &Device,
+) -> Result<Tensor> {
     let mut data = vec![0f32; seq * total];
     for i in 0..seq {
         let limit = offset + i;
@@ -78,7 +89,7 @@ fn causal_mask(seq: usize, total: usize, offset: usize, device: &Device) -> Resu
             }
         }
     }
-    Tensor::from_vec(data, (seq, total), device)
+    Tensor::from_vec(data, (seq, total), device)?.to_dtype(dtype)
 }
 
 struct Mlp {
@@ -133,10 +144,11 @@ impl Block {
         rope: &RotaryCache,
         cache: &mut LayerKvCache,
         offset: usize,
+        mask: Option<&Tensor>,
     ) -> Result<Tensor> {
         let residual = x;
         let hidden = self.input_layernorm.forward(x)?;
-        let hidden = self.attn.forward(&hidden, rope, cache, offset)?;
+        let hidden = self.attn.forward(&hidden, rope, cache, offset, mask)?;
         let x = (residual + hidden)?;
         let residual = &x;
         let hidden = self.post_attention_layernorm.forward(&x)?;
@@ -184,9 +196,24 @@ impl LlamaStack {
     /// positions start at the current cache length.
     pub fn forward(&self, embeds: &Tensor, cache: &mut StackCache) -> Result<Tensor> {
         let offset = cache.len();
+        let seq = embeds.dim(1)?;
+        // Every layer of the stack shares one mask, so build it once here. A
+        // single query attends to the whole cache, making the mask all zeros --
+        // skip it entirely on the decode path.
+        let mask = if seq > 1 {
+            Some(causal_mask(
+                seq,
+                offset + seq,
+                offset,
+                embeds.dtype(),
+                embeds.device(),
+            )?)
+        } else {
+            None
+        };
         let mut x = embeds.clone();
         for (index, block) in self.blocks.iter().enumerate() {
-            x = block.forward(&x, &self.rope, cache.layer(index), offset)?;
+            x = block.forward(&x, &self.rope, cache.layer(index), offset, mask.as_ref())?;
         }
         self.norm.forward(&x)
     }

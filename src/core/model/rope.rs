@@ -5,7 +5,7 @@
 //! contiguous halves -> candle's `rotary_emb::rope` (not the interleaved
 //! `rope_i`). Each stack has its own table because head_dim differs (64 vs 256).
 
-use candle_core::{DType, Device, Result, Tensor};
+use candle_core::{Device, Result, Tensor};
 
 pub struct RotaryCache {
     cos: Tensor,
@@ -38,6 +38,6 @@ impl RotaryCache {
         let seq = x.dim(2)?;
         let cos = self.cos.narrow(0, offset, seq)?;
         let sin = self.sin.narrow(0, offset, seq)?;
-        candle_nn::rotary_emb::rope(&x.contiguous()?, &cos.to_dtype(DType::F32)?, &sin)
+        candle_nn::rotary_emb::rope(&x.contiguous()?, &cos, &sin)
     }
 }

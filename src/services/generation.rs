@@ -12,6 +12,7 @@ use rand_chacha::ChaCha8Rng;
 
 use crate::core::constraints::{DecodeFlags, allowed_event_ids, allowed_param_ids};
 use crate::core::midi::gm;
+use crate::core::model::kv_cache::StackCache;
 use crate::core::model::midi_model::MidiModel;
 use crate::core::sampler::{
     apply_mask, apply_repetition_penalty, no_repeat_ngram_bans, sample_top_p_k, softmax_with_temp,
@@ -198,6 +199,10 @@ fn run_batches(
     progress: &mut impl FnMut(i64, i64),
 ) -> Result<()> {
     let device = model.device().clone();
+    // Both caches are allocated once and rewound per section / per event, so a
+    // long run never re-allocates them.
+    let mut base_cache = model.base_cache(prompt_size + section_size);
+    let mut token_cache = model.token_cache(MAX_TOKEN_SEQ);
 
     while !cancel.load(Ordering::Relaxed) {
         let active: Vec<usize> = (0..tracks.len())
@@ -228,7 +233,7 @@ fn run_batches(
             .min(section_size);
 
         let mut input = stack_rows(&prompt_rows, &device)?;
-        let mut base_cache = model.base_cache();
+        base_cache.reset();
 
         for _ in 0..events_in_section {
             if cancel.load(Ordering::Relaxed) {
@@ -251,6 +256,7 @@ fn run_batches(
             let rows = sample_event_batch(
                 model,
                 &hidden,
+                &mut token_cache,
                 flags,
                 params,
                 rng,
@@ -300,6 +306,7 @@ fn run_batches(
 fn sample_event_batch(
     model: &MidiModel,
     hidden: &Tensor,
+    token_cache: &mut StackCache,
     flags: &DecodeFlags,
     params: &DecodeParams,
     rng: &mut ChaCha8Rng,
@@ -308,7 +315,7 @@ fn sample_event_batch(
     history: &[&[u32]],
 ) -> Result<Vec<TokenRow>> {
     let device = model.device().clone();
-    let mut token_cache = model.token_cache();
+    token_cache.reset();
     let mut rows = vec![[PAD_ID as i16; MAX_TOKEN_SEQ]; batch];
     let mut kinds: Vec<Option<EventType>> = vec![None; batch];
     let mut ended = vec![false; batch];
@@ -316,10 +323,10 @@ fn sample_event_batch(
 
     for slot in 0..MAX_TOKEN_SEQ {
         let logits = if slot == 0 {
-            model.token_logits_from_hidden(hidden, &mut token_cache)?
+            model.token_logits_from_hidden(hidden, token_cache)?
         } else {
             let prev = Tensor::from_vec(last_ids.clone(), (batch, 1), &device)?;
-            model.token_logits_from_id(&prev, &mut token_cache)?
+            model.token_logits_from_id(&prev, token_cache)?
         };
         let rows_logits = logits.to_vec2::<f32>()?;
         for item in 0..batch {
