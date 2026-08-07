@@ -290,6 +290,28 @@ mod tests {
         assert_eq!(banned, vec![3]);
     }
 
+    /// Ids are recorded slot by slot, so while a repeated event is being
+    /// decoded the guard always names the id belonging to the current slot --
+    /// not the event type the run happened to start with.
+    #[test]
+    fn ngram_ban_tracks_the_slot_being_decoded() {
+        let mut history = TokenHistory::new(64, 32);
+        let event = [10u32, 20, 30, 40];
+        for _ in 0..2 {
+            for id in event {
+                history.push(id);
+            }
+        }
+        for (slot, &id) in event.iter().enumerate() {
+            assert_eq!(
+                no_repeat_ngram_bans(history.ids(), 5),
+                vec![id],
+                "slot {slot}"
+            );
+            history.push(id);
+        }
+    }
+
     #[test]
     fn ngram_ban_empty_without_history() {
         let history = vec![1, 2];
