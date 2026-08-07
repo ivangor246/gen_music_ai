@@ -115,11 +115,11 @@ pub fn generate(
         let path = cache_dir.join(format!("track_{stamp}_{}.tokens", index + 1));
         let mut store = TokenStore::create(&path, None)?;
         store.extend(&prompt_rows)?;
-        let initial_end_tick = store.end_tick();
+        let initial_last_tick = store.last_tick();
         tracks.push(TrackGen {
             store,
-            initial_end_tick,
-            target_tick: initial_end_tick + target_ticks,
+            initial_last_tick,
+            target_tick: initial_last_tick + target_ticks,
             max_events,
             generated: 0,
             done: false,
@@ -157,7 +157,7 @@ pub fn generate(
 
 struct TrackGen {
     store: TokenStore,
-    initial_end_tick: i64,
+    initial_last_tick: i64,
     target_tick: i64,
     max_events: usize,
     generated: usize,
@@ -165,12 +165,15 @@ struct TrackGen {
 }
 
 impl TrackGen {
+    /// Progress is measured by event onsets, not by how long the last note
+    /// rings: a single held note can reach far past the target tick without the
+    /// composition being anywhere near its requested length.
     fn has_work(&self) -> bool {
-        !self.done && self.store.end_tick() < self.target_tick && self.generated < self.max_events
+        !self.done && self.store.last_tick() < self.target_tick && self.generated < self.max_events
     }
 
     fn completed(&self, target_ticks: i64) -> i64 {
-        (self.store.end_tick() - self.initial_end_tick).clamp(0, target_ticks)
+        (self.store.last_tick() - self.initial_last_tick).clamp(0, target_ticks)
     }
 }
 

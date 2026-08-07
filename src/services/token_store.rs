@@ -158,8 +158,11 @@ impl TokenStore {
         Ok(store)
     }
 
-    pub fn end_tick(&self) -> i64 {
-        self.end_tick
+    /// Tick of the latest event onset. This is how far the composition has been
+    /// written, which is what drives the stop condition -- unlike `end_tick`,
+    /// which also covers how long the last note keeps ringing.
+    pub fn last_tick(&self) -> i64 {
+        self.last_tick
     }
 
     pub fn path(&self) -> &Path {
@@ -186,6 +189,9 @@ impl TokenStore {
         Ok(())
     }
 
+    /// `last_tick` follows event onsets; `end_tick` additionally covers the tail
+    /// of the longest note, so it is the right length for export but the wrong
+    /// measure of progress.
     fn observe_timeline(&mut self, event: &Event) {
         self.coarse_time += i64::from(event.params[0]);
         let tick = (self.coarse_time * 16 + i64::from(event.params[1])) * 480 / 16;
@@ -335,15 +341,23 @@ mod tests {
     }
 
     #[test]
-    fn timeline_tracks_end_tick() {
+    fn onset_and_ring_out_are_tracked_separately() {
         let dir = std::env::temp_dir().join(format!("ts_test_{}", std::process::id()));
         let path = dir.join("track.tokens");
         let mut store = TokenStore::create(&path, None).unwrap();
 
-        // A note at time1=1, duration=16 sixteenths -> tick 480, end 480+480.
+        // A note at time1=1, duration=16 sixteenths -> onset 480, ring-out 960.
         let note = Event::new(EventType::Note, vec![1, 0, 0, 0, 60, 100, 16]);
         store.append(&event_to_tokens(&note).unwrap()).unwrap();
-        assert_eq!(store.end_tick(), 480 + 480);
+        assert_eq!(store.last_tick(), 480);
+        assert_eq!(store.end_tick, 480 + 480);
+
+        // A very long note moves the ring-out far past the onset; progress must
+        // keep following the onset, or one such note ends the track early.
+        let held = Event::new(EventType::Note, vec![0, 0, 0, 0, 48, 100, 2047]);
+        store.append(&event_to_tokens(&held).unwrap()).unwrap();
+        assert_eq!(store.last_tick(), 480);
+        assert_eq!(store.end_tick, 480 + 2047 * 30);
 
         store.finish().unwrap();
         std::fs::remove_dir_all(&dir).ok();
