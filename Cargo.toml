@@ -52,6 +52,8 @@ half = "2"
 safetensors = "0.4"
 rand = "0.8"
 rand_chacha = "0.3"
+# Candle's CPU matmul dispatches onto the global rayon pool; we size that pool.
+rayon = "1"
 hound = "3.5.1"
 cpal = "0.18.1"
 # sf3: the bundled soundfont uses Ogg/Vorbis-compressed samples (SF3).
@@ -67,3 +69,11 @@ codegen-units = 1
 opt-level = 3
 panic = "abort"
 strip = "symbols"
+
+# `cargo test --release` builds with this profile. It inherits from `release`,
+# whose fat LTO and single codegen unit need several GB of RAM to link -- enough
+# to push a small machine into swap while building the heavy tests. Tests only
+# need the optimization, not the link-time work, so both are turned back off.
+[profile.bench]
+lto = false
+codegen-units = 16

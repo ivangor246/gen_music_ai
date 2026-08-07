@@ -1,0 +1,155 @@
+//! CPU and memory budgeting for generation.
+//!
+//! Generation is memory-bandwidth bound and will happily saturate every core
+//! and every spare gigabyte, which on a small machine leaves nothing for the
+//! desktop and can push the whole system into swap. Every decision about how
+//! much of the machine to take lives here, so the app and the heavy tests make
+//! the same one.
+
+use std::sync::OnceLock;
+
+use anyhow::{Result, bail};
+
+use crate::core::model::config::{LlamaConfig, ModelConfig};
+use crate::core::tokenizer::vocab::MAX_TOKEN_SEQ;
+
+/// Caches are held as f32, matching the runtime dtype.
+const CACHE_DTYPE_BYTES: usize = 4;
+/// A run may claim at most this fraction of still-available memory for its
+/// attention caches. The rest is headroom for the rest of the system.
+const CACHE_MEMORY_SHARE: usize = 2;
+
+static THREADS: OnceLock<usize> = OnceLock::new();
+
+/// Threads to run tensor math on: half the logical cores, which on an SMT
+/// machine is roughly the physical core count. This workload is bandwidth-bound
+/// and stops scaling well before every core is busy, so the spare half buys
+/// desktop responsiveness for very little throughput. `RAYON_NUM_THREADS`
+/// overrides the choice.
+pub fn compute_threads() -> usize {
+    if let Some(requested) = std::env::var("RAYON_NUM_THREADS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|&value| value > 0)
+    {
+        return requested;
+    }
+    let total = std::thread::available_parallelism().map_or(1, |count| count.get());
+    (total / 2).max(1)
+}
+
+/// Cap the global rayon pool that candle's matmul kernels run on, and report the
+/// cap. Idempotent and safe to call from any thread: the first call wins, and a
+/// pool somebody else already built is left alone.
+pub fn configure_threads() -> usize {
+    *THREADS.get_or_init(|| {
+        let threads = compute_threads();
+        let _ = rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build_global();
+        threads
+    })
+}
+
+/// Memory the platform reports as available, when it can. `MemAvailable`
+/// already accounts for reclaimable page cache, so it is the honest number.
+#[cfg(target_os = "linux")]
+pub fn available_memory() -> Option<usize> {
+    let meminfo = std::fs::read_to_string("/proc/meminfo").ok()?;
+    let line = meminfo
+        .lines()
+        .find_map(|line| line.strip_prefix("MemAvailable:"))?;
+    let kib: usize = line.split_whitespace().next()?.parse().ok()?;
+    Some(kib * 1024)
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn available_memory() -> Option<usize> {
+    None
+}
+
+/// Bytes the attention caches hold for a run: keys and values, for every layer
+/// of both stacks, over the full context window, for every track in the batch.
+pub fn cache_bytes(config: &ModelConfig, batch: usize, context: usize) -> usize {
+    stack_cache_bytes(&config.net, batch, context)
+        + stack_cache_bytes(&config.net_token, batch, MAX_TOKEN_SEQ)
+}
+
+fn stack_cache_bytes(config: &LlamaConfig, batch: usize, positions: usize) -> usize {
+    2 * config.num_hidden_layers
+        * batch
+        * config.num_attention_heads
+        * positions
+        * config.head_dim()
+        * CACHE_DTYPE_BYTES
+}
+
+/// Refuse a run whose caches would not fit rather than letting the machine swap
+/// itself to a standstill. Platforms that cannot report free memory are trusted.
+pub fn check_cache_budget(config: &ModelConfig, batch: usize, context: usize) -> Result<()> {
+    let needed = cache_bytes(config, batch, context);
+    let Some(available) = available_memory() else {
+        return Ok(());
+    };
+    let budget = available / CACHE_MEMORY_SHARE;
+    if needed > budget {
+        bail!(
+            "this run needs {} of attention cache but only {} can be spared right now \
+             ({} available): reduce the context window or the number of results",
+            mib(needed),
+            mib(budget),
+            mib(available),
+        );
+    }
+    Ok(())
+}
+
+fn mib(bytes: usize) -> String {
+    format!("{} MiB", bytes / (1024 * 1024))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn config() -> ModelConfig {
+        ModelConfig::from_json(crate::assets::CONFIG_JSON).unwrap()
+    }
+
+    #[test]
+    fn thread_cap_leaves_the_machine_usable() {
+        let threads = compute_threads();
+        assert!(threads >= 1);
+        let total = std::thread::available_parallelism().map_or(1, |count| count.get());
+        assert!(threads <= total);
+    }
+
+    #[test]
+    fn cache_size_matches_the_hand_computed_figure() {
+        // base: 2 (k+v) * 12 layers * 4 tracks * 16 heads * 512 pos * 64 dim * 4 B
+        let base = 2 * 12 * 4 * 16 * 512 * 64 * 4;
+        // token net: 3 layers, 4 heads, 8 positions, 256 dim
+        let token = 2 * 3 * 4 * 4 * MAX_TOKEN_SEQ * 256 * 4;
+        assert_eq!(cache_bytes(&config(), 4, 512), base + token);
+    }
+
+    #[test]
+    fn cache_size_scales_with_batch_and_context() {
+        let config = config();
+        let single = cache_bytes(&config, 1, 512);
+        assert_eq!(cache_bytes(&config, 4, 512), 4 * single);
+        // Only the base stack grows with the context window.
+        let wide = cache_bytes(&config, 1, 1024);
+        assert!(wide > single && wide < 2 * single);
+    }
+
+    #[test]
+    fn absurd_requests_are_refused() {
+        // Rejection needs a memory reading; platforms without one trust the caller.
+        if available_memory().is_none() {
+            return;
+        }
+        assert!(check_cache_budget(&config(), 4, 512).is_ok());
+        assert!(check_cache_budget(&config(), 4096, 4096).is_err());
+    }
+}

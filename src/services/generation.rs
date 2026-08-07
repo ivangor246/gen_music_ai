@@ -23,6 +23,7 @@ use crate::core::tokenizer::events::EventType;
 use crate::core::tokenizer::vocab::{
     BOS_ID, EOS_ID, MAX_TOKEN_SEQ, PAD_ID, VOCAB_SIZE, event_type_from_id,
 };
+use crate::runtime;
 use crate::services::token_store::TokenStore;
 use crate::settings::{AUTO_VALUE, GenerationRequest, GenerationSettings};
 
@@ -87,6 +88,15 @@ pub fn generate(
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
 
     let (prompt_size, section_size) = split_context(settings.context_window);
+    // Take a bounded slice of the machine: the caches are preallocated for the
+    // whole window, so an oversized request is worth refusing up front rather
+    // than discovering it as swap thrash.
+    runtime::configure_threads();
+    runtime::check_cache_budget(
+        model.config(),
+        request.batch_size,
+        (prompt_size + section_size) as usize,
+    )?;
     let target_ticks = settings.target_ticks();
     let max_events = (settings.event_count() * 16).max(settings.bars * 128) as usize;
     let params = SamplingParams {

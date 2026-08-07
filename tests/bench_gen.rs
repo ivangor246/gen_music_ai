@@ -9,7 +9,9 @@ use candle_core::Device;
 use gen_music_ai::assets;
 use gen_music_ai::core::model::config::ModelConfig;
 use gen_music_ai::core::model::midi_model::MidiModel;
-use gen_music_ai::services::generation::generate;
+use gen_music_ai::core::tokenizer::codec::{Event, tokens_to_event};
+use gen_music_ai::services::generation::{GeneratedTrack, generate};
+use gen_music_ai::services::token_store::read_rows;
 use gen_music_ai::settings::{GenerationRequest, GenerationSettings};
 
 #[test]
@@ -39,7 +41,7 @@ fn bench_batched_generation() {
     let cancel = AtomicBool::new(false);
     let ticks = AtomicUsize::new(0);
     let start = Instant::now();
-    generate(&model, &request, &dir, &cancel, |_c, _t| {
+    let output = generate(&model, &request, &dir, &cancel, |_c, _t| {
         if ticks.fetch_add(1, Ordering::Relaxed) + 1 >= steps {
             cancel.store(true, Ordering::Relaxed);
         }
@@ -52,6 +54,27 @@ fn bench_batched_generation() {
         elapsed / outer as f64,
         elapsed / (outer * batch) as f64,
     );
+    describe(&output.tracks[0]);
 
     std::fs::remove_dir_all(&dir).ok();
+}
+
+/// Print what the first track actually contains. A run that stops early does so
+/// because the onset tick reached the target, so the time deltas are what to
+/// look at.
+fn describe(track: &GeneratedTrack) {
+    let rows = read_rows(&track.token_path).unwrap();
+    let events: Vec<Event> = rows.iter().filter_map(|row| tokens_to_event(row)).collect();
+    let quarters: i64 = events.iter().map(|e| i64::from(e.params[0])).sum();
+    let kinds: Vec<&str> = events.iter().map(|e| e.kind.name()).collect();
+    let deltas: Vec<u16> = events.iter().map(|e| e.params[0]).collect();
+
+    eprintln!(
+        "track 1: {} events, onset {} ticks of {} target",
+        events.len(),
+        quarters * 480,
+        track.target_tick,
+    );
+    eprintln!("  kinds:  {kinds:?}");
+    eprintln!("  time1:  {deltas:?}");
 }
