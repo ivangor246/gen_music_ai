@@ -10,6 +10,7 @@ All notable changes to this project are documented in this file. The format is b
 
 - Built-in model catalog with selection, resumable download progress, checksum verification,
   explicit loading, cancellation, retry, and confirmed local removal.
+- Per-instrument audio previews in the searchable General MIDI selection list.
 - Lightweight Linux, Windows, and macOS CI coverage for the external model workflow.
 
 ### Changed

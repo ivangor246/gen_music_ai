@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use crate::core::model::midi_model::MidiModel;
 use crate::services::generation::GenerationOutput;
+use crate::services::playback::PlaybackEngine;
 use crate::services::timeline::Timeline;
 
 /// A payload that is opaque to `Debug` (iced requires `Message: Debug + Clone`).
@@ -44,6 +45,8 @@ pub enum Message {
     // Form
     Form(FormMsg),
     ToggleInstrument(usize),
+    PreviewInstrument(usize),
+    InstrumentPreviewReady(Result<Hidden<Arc<PlaybackEngine>>, String>),
     InstrumentQueryInput(String),
 
     // Presets

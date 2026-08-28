@@ -103,7 +103,30 @@ fn instrument_list(state: &State, selected_count: usize) -> Element<'_, Message>
             } else {
                 instrument
             };
-            list = list.push(instrument);
+            let preview_label = if state.instrument_preview_loading
+                && state.instrument_preview_index == Some(index)
+            {
+                "…"
+            } else if state.instrument_preview_index == Some(index) {
+                "■ Stop"
+            } else {
+                "▶ Play"
+            };
+            let preview = button(text(preview_label).size(12))
+                .padding([theme::SPACE_XS, theme::SPACE_SM])
+                .width(Length::Fixed(72.0))
+                .style(theme::secondary_button);
+            let preview = if state.generating {
+                preview
+            } else {
+                preview.on_press(Message::PreviewInstrument(index))
+            };
+            list = list.push(
+                row![container(instrument).width(Length::Fill), preview]
+                    .align_y(Alignment::Center)
+                    .spacing(theme::SPACE_SM)
+                    .width(Length::Fill),
+            );
         }
     }
 

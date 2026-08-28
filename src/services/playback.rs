@@ -11,7 +11,13 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
 use crate::core::midi::score::Action;
 use crate::services::synth::{OxiSynth, SAMPLE_RATE, SynthEngine};
-use crate::services::timeline::Timeline;
+use crate::services::timeline::{Timeline, TimelineEvent};
+
+const PREVIEW_CHANNEL: u8 = 0;
+const PREVIEW_PITCH: u8 = 60;
+const PREVIEW_VELOCITY: u8 = 100;
+const PREVIEW_NOTE_SECONDS: f64 = 0.9;
+const PREVIEW_DURATION_SECONDS: f64 = 1.25;
 
 struct Scheduled {
     sample: usize,
@@ -173,6 +179,11 @@ impl PlaybackEngine {
         Ok(())
     }
 
+    pub fn preview_patch(&self, patch: u8) -> Result<()> {
+        self.set_track(&preview_timeline(patch))?;
+        self.play(0.0)
+    }
+
     pub fn pause(&self) -> Result<()> {
         let mut guard = self.lock_shared()?;
         guard.playing = false;
@@ -201,6 +212,36 @@ impl PlaybackEngine {
         self.shared
             .lock()
             .map_err(|_| anyhow!("audio playback state is unavailable"))
+    }
+}
+
+fn preview_timeline(patch: u8) -> Timeline {
+    Timeline {
+        events: vec![
+            TimelineEvent {
+                seconds: 0.0,
+                action: Action::PatchChange {
+                    channel: PREVIEW_CHANNEL,
+                    patch,
+                },
+            },
+            TimelineEvent {
+                seconds: 0.0,
+                action: Action::NoteOn {
+                    channel: PREVIEW_CHANNEL,
+                    pitch: PREVIEW_PITCH,
+                    velocity: PREVIEW_VELOCITY,
+                },
+            },
+            TimelineEvent {
+                seconds: PREVIEW_NOTE_SECONDS,
+                action: Action::NoteOff {
+                    channel: PREVIEW_CHANNEL,
+                    pitch: PREVIEW_PITCH,
+                },
+            },
+        ],
+        duration: PREVIEW_DURATION_SECONDS,
     }
 }
 
@@ -249,5 +290,27 @@ fn fill_audio(shared: &Arc<Mutex<Shared>>, data: &mut [f32]) {
         guard.synth.render_f32_into(slice);
         guard.sample_pos += chunk;
         filled += chunk;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn preview_uses_requested_patch_and_bounded_note() {
+        let timeline = preview_timeline(40);
+        assert_eq!(timeline.duration, PREVIEW_DURATION_SECONDS);
+        assert_eq!(timeline.events.len(), 3);
+        assert_eq!(
+            timeline.events[0].action,
+            Action::PatchChange {
+                channel: PREVIEW_CHANNEL,
+                patch: 40,
+            }
+        );
+        assert!(matches!(timeline.events[1].action, Action::NoteOn { .. }));
+        assert!(matches!(timeline.events[2].action, Action::NoteOff { .. }));
+        assert!(timeline.events[2].seconds < timeline.duration);
     }
 }

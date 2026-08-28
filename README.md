@@ -19,6 +19,7 @@ Generation runs entirely on the CPU and does not require a GPU or a remote infer
 ## Features
 
 - Generate tracks with up to 15 selected General MIDI instruments, or let the model choose.
+- Audition every General MIDI instrument directly from the searchable selection list.
 - Configure drum kit, tempo, time signature, key signature, length, and event budget.
 - Tune temperature, top-p, top-k, result count, seed, control changes, and musical memory.
 - Start from built-in style presets or save and delete custom presets.

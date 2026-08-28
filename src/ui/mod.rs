@@ -21,7 +21,7 @@ const ICON_SIZE: u32 = 128;
 pub(super) const INITIAL_WINDOW_WIDTH: f32 = 1_100.0;
 
 fn subscription(state: &State) -> Subscription<Message> {
-    let playback = if state.playing {
+    let playback = if state.playing || state.instrument_preview_index.is_some() {
         iced::time::every(Duration::from_millis(50)).map(|_| Message::Tick)
     } else {
         Subscription::none()

@@ -11,6 +11,7 @@ use crate::core::model::midi_model::MidiModel;
 use crate::services::generation::generate;
 use crate::services::model_catalog::ModelDescriptor;
 use crate::services::model_store::{ModelStore, was_cancelled};
+use crate::services::playback::PlaybackEngine;
 use crate::settings::GenerationRequest;
 
 use super::message::{GenEvent, Hidden, Message};
@@ -30,6 +31,21 @@ where
         }
     });
     Task::stream(stream)
+}
+
+pub fn create_playback_engine() -> anyhow::Result<PlaybackEngine> {
+    let soundfont = crate::assets::soundfont()?;
+    PlaybackEngine::new(soundfont.as_ref())
+}
+
+pub fn prepare_instrument_preview() -> Task<Message> {
+    run_once(|| {
+        let result = create_playback_engine()
+            .map(Arc::new)
+            .map(Hidden)
+            .map_err(|error| format!("{error:#}"));
+        Message::InstrumentPreviewReady(result)
+    })
 }
 
 /// Load a verified installed model at the chosen precision.

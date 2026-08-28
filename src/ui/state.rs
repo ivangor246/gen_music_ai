@@ -114,7 +114,9 @@ pub struct State {
     pub confirming_cache_clear: bool,
 
     // Player
-    pub player: Option<PlaybackEngine>,
+    pub player: Option<Arc<PlaybackEngine>>,
+    pub instrument_preview_index: Option<usize>,
+    pub instrument_preview_loading: bool,
     pub timeline: Option<Timeline>,
     pub density: Vec<f32>,
     pub duration: f64,
@@ -189,6 +191,8 @@ impl State {
             selected_result: None,
             confirming_cache_clear: false,
             player: None,
+            instrument_preview_index: None,
+            instrument_preview_loading: false,
             timeline: None,
             density: Vec::new(),
             duration: 0.0,

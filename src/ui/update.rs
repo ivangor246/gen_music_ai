@@ -8,7 +8,6 @@ use crate::services::export_midi::save_midi;
 use crate::services::export_wav::save_wav;
 use crate::services::model_catalog::ModelDescriptor;
 use crate::services::model_store::LocalModelState;
-use crate::services::playback::PlaybackEngine;
 use crate::services::timeline::Timeline;
 
 use super::message::{FormMsg, Hidden, Message};
@@ -193,6 +192,43 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
                 *slot = !selected;
             }
         }
+        Message::PreviewInstrument(index) => {
+            if state.generating || index >= crate::core::midi::gm::PATCH_NAMES.len() {
+                return Task::none();
+            }
+            if state.instrument_preview_index == Some(index) && !state.instrument_preview_loading {
+                stop_instrument_preview(state);
+                state.status = "Instrument preview stopped.".to_string();
+                return Task::none();
+            }
+            pause_track_for_preview(state);
+            state.instrument_preview_index = Some(index);
+            if state.player.is_some() {
+                start_instrument_preview(state, index);
+            } else if !state.instrument_preview_loading {
+                state.instrument_preview_loading = true;
+                state.status = format!(
+                    "Preparing preview for \"{}\"…",
+                    crate::core::midi::gm::PATCH_NAMES[index]
+                );
+                return tasks::prepare_instrument_preview();
+            }
+        }
+        Message::InstrumentPreviewReady(result) => {
+            state.instrument_preview_loading = false;
+            match result {
+                Ok(Hidden(player)) => {
+                    state.player = Some(player);
+                    if let Some(index) = state.instrument_preview_index {
+                        start_instrument_preview(state, index);
+                    }
+                }
+                Err(error) => {
+                    state.instrument_preview_index = None;
+                    state.status = format!("Instrument preview is unavailable: {error}");
+                }
+            }
+        }
 
         Message::SelectPreset(name) => {
             if let Some(preset) = state.preset_store.get(&name) {
@@ -246,6 +282,7 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
             if state.generating {
                 return Task::none();
             }
+            stop_instrument_preview(state);
             stop_playback(state);
             state.confirming_cache_clear = false;
             state.confirming_model_remove = false;
@@ -303,6 +340,7 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
             if index >= state.results.len() {
                 return Task::none();
             }
+            stop_instrument_preview(state);
             stop_playback(state);
             state.selected_result = Some(index);
             clear_timeline(state);
@@ -357,7 +395,7 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
 
         Message::Play => return play(state),
         Message::Pause => {
-            let result = state.player.as_ref().map(PlaybackEngine::pause);
+            let result = state.player.as_ref().map(|player| player.pause());
             if let Some(Err(error)) = result {
                 reset_playback(state, error);
             } else {
@@ -379,7 +417,7 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
         }
         Message::Tick => {
             if state.playing {
-                let snapshot = state.player.as_ref().map(PlaybackEngine::snapshot);
+                let snapshot = state.player.as_ref().map(|player| player.snapshot());
                 match snapshot {
                     Some(Ok(snapshot)) => {
                         state.position = snapshot.position;
@@ -391,6 +429,20 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
                     None => {
                         state.playing = false;
                     }
+                }
+            }
+            if state.instrument_preview_index.is_some() && !state.instrument_preview_loading {
+                let snapshot = state.player.as_ref().map(|player| player.snapshot());
+                match snapshot {
+                    Some(Ok(snapshot)) if !snapshot.playing => {
+                        state.instrument_preview_index = None;
+                        if state.status.starts_with("Previewing instrument") {
+                            state.status = "Instrument preview finished.".to_string();
+                        }
+                    }
+                    Some(Ok(_)) => {}
+                    Some(Err(error)) => reset_playback(state, error),
+                    None => state.instrument_preview_index = None,
                 }
             }
         }
@@ -440,23 +492,57 @@ fn update_whole_number(target: &mut String, value: String) {
     }
 }
 
+fn start_instrument_preview(state: &mut State, index: usize) {
+    let Some(player) = state.player.clone() else {
+        return;
+    };
+    let name = crate::core::midi::gm::PATCH_NAMES[index];
+    match player.preview_patch(index as u8) {
+        Ok(()) => state.status = format!("Previewing instrument \"{name}\"…"),
+        Err(error) => {
+            state.player = None;
+            state.instrument_preview_index = None;
+            state.status = format!("Instrument preview failed: {error}");
+        }
+    }
+}
+
+fn pause_track_for_preview(state: &mut State) {
+    if !state.playing {
+        return;
+    }
+    match state.player.as_ref().map(|player| player.pause()) {
+        Some(Ok(())) => state.playing = false,
+        Some(Err(error)) => reset_playback(state, error),
+        None => state.playing = false,
+    }
+}
+
+fn stop_instrument_preview(state: &mut State) {
+    if state.instrument_preview_index.take().is_none() || state.instrument_preview_loading {
+        return;
+    }
+    if let Some(error) = state.player.as_ref().and_then(|player| player.stop().err()) {
+        reset_playback(state, error);
+    }
+}
+
 fn play(state: &mut State) -> Task<Message> {
     if state.timeline.is_none() {
         return Task::none();
     }
+    if state.instrument_preview_loading {
+        state.instrument_preview_index = None;
+        state.status = "Audio is still preparing; try Play again in a moment.".to_string();
+        return Task::none();
+    }
+    stop_instrument_preview(state);
     if state.player.is_none() {
         state.status = "Preparing audio…".to_string();
-        let soundfont = match crate::assets::soundfont() {
-            Ok(soundfont) => soundfont,
+        match tasks::create_playback_engine() {
+            Ok(engine) => state.player = Some(std::sync::Arc::new(engine)),
             Err(error) => {
                 state.status = format!("Audio is unavailable: {error:#}");
-                return Task::none();
-            }
-        };
-        match PlaybackEngine::new(soundfont.as_ref()) {
-            Ok(engine) => state.player = Some(engine),
-            Err(error) => {
-                state.status = format!("Audio is unavailable: {error}");
                 return Task::none();
             }
         }
@@ -493,6 +579,7 @@ fn stop_playback(state: &mut State) {
 fn reset_playback(state: &mut State, error: anyhow::Error) {
     state.player = None;
     state.playing = false;
+    state.instrument_preview_index = None;
     state.status = format!("Audio playback was reset: {error}");
 }
 
@@ -548,6 +635,7 @@ fn clear_cache(state: &mut State) {
     let dir = crate::paths::cache_dir();
     let result = crate::services::token_store::clear_cache(&dir);
     state.confirming_cache_clear = false;
+    stop_instrument_preview(state);
     stop_playback(state);
     state.results.clear();
     state.result_durations.clear();
