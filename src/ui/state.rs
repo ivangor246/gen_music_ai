@@ -66,6 +66,14 @@ pub struct ActiveModel {
     pub model: Arc<MidiModel>,
 }
 
+/// What to start once the playback engine is ready. Building it decodes the
+/// SoundFont, which takes seconds, so audio is requested before it exists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AudioRequest {
+    Track,
+    Preview(usize),
+}
+
 pub struct State {
     pub viewport_width: f32,
     pub model: ModelState,
@@ -115,8 +123,9 @@ pub struct State {
 
     // Player
     pub player: Option<Arc<PlaybackEngine>>,
-    pub instrument_preview_index: Option<usize>,
-    pub instrument_preview_loading: bool,
+    pub player_loading: bool,
+    pub pending_audio: Option<AudioRequest>,
+    pub preview_patch: Option<usize>,
     pub timeline: Option<Timeline>,
     pub density: Vec<f32>,
     pub duration: f64,
@@ -191,8 +200,9 @@ impl State {
             selected_result: None,
             confirming_cache_clear: false,
             player: None,
-            instrument_preview_index: None,
-            instrument_preview_loading: false,
+            player_loading: false,
+            pending_audio: None,
+            preview_patch: None,
             timeline: None,
             density: Vec::new(),
             duration: 0.0,

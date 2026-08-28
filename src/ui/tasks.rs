@@ -33,18 +33,16 @@ where
     Task::stream(stream)
 }
 
-pub fn create_playback_engine() -> anyhow::Result<PlaybackEngine> {
-    let soundfont = crate::assets::soundfont()?;
-    PlaybackEngine::new(soundfont.as_ref())
-}
-
-pub fn prepare_instrument_preview() -> Task<Message> {
+/// Build the playback engine off the UI thread: decoding the SoundFont takes
+/// seconds and allocates hundreds of megabytes, so it must never block a click.
+pub fn prepare_player() -> Task<Message> {
     run_once(|| {
-        let result = create_playback_engine()
+        let result = crate::assets::soundfont()
+            .and_then(|soundfont| PlaybackEngine::new(soundfont.as_ref()))
             .map(Arc::new)
             .map(Hidden)
             .map_err(|error| format!("{error:#}"));
-        Message::InstrumentPreviewReady(result)
+        Message::PlayerReady(result)
     })
 }
 

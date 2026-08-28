@@ -6,7 +6,7 @@ use iced::{Alignment, Element, Length};
 use crate::core::midi::gm::{PATCH_FAMILIES, PATCH_NAMES};
 
 use super::message::Message;
-use super::state::{MAX_INSTRUMENTS, State};
+use super::state::{AudioRequest, MAX_INSTRUMENTS, State};
 use super::theme;
 
 pub fn view(state: &State) -> Element<'_, Message> {
@@ -103,18 +103,9 @@ fn instrument_list(state: &State, selected_count: usize) -> Element<'_, Message>
             } else {
                 instrument
             };
-            let preview_label = if state.instrument_preview_loading
-                && state.instrument_preview_index == Some(index)
-            {
-                "…"
-            } else if state.instrument_preview_index == Some(index) {
-                "■ Stop"
-            } else {
-                "▶ Play"
-            };
-            let preview = button(text(preview_label).size(12))
+            let preview = button(text(preview_label(state, index)).size(12))
                 .padding([theme::SPACE_XS, theme::SPACE_SM])
-                .width(Length::Fixed(72.0))
+                .width(Length::Fixed(76.0))
                 .style(theme::secondary_button);
             let preview = if state.generating {
                 preview
@@ -135,6 +126,19 @@ fn instrument_list(state: &State, selected_count: usize) -> Element<'_, Message>
             .padding(theme::SPACE_SM)
             .into()
     } else {
-        list.into()
+        // Keep the buttons clear of the scrollbar drawn inside the viewport.
+        container(list)
+            .padding(iced::Padding::ZERO.right(theme::SPACE_MD))
+            .into()
+    }
+}
+
+fn preview_label(state: &State, index: usize) -> &'static str {
+    if state.preview_patch == Some(index) {
+        "■ Stop"
+    } else if state.pending_audio == Some(AudioRequest::Preview(index)) {
+        "…"
+    } else {
+        "▶ Play"
     }
 }

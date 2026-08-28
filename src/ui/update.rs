@@ -8,11 +8,20 @@ use crate::services::export_midi::save_midi;
 use crate::services::export_wav::save_wav;
 use crate::services::model_catalog::ModelDescriptor;
 use crate::services::model_store::LocalModelState;
+use crate::services::preview;
 use crate::services::timeline::Timeline;
 
 use super::message::{FormMsg, Hidden, Message};
-use super::state::{ActiveModel, MAX_INSTRUMENTS, ModelState, State};
+use super::state::{ActiveModel, AudioRequest, MAX_INSTRUMENTS, ModelState, State};
 use super::tasks;
+
+/// Work started before the first message. Decoding the SoundFont takes seconds,
+/// so the engine is built while the user is still setting a track up; by the
+/// time anything is played it is ready.
+pub fn boot(state: &mut State) -> Task<Message> {
+    state.player_loading = true;
+    tasks::prepare_player()
+}
 
 pub fn update(state: &mut State, message: Message) -> Task<Message> {
     match message {
@@ -196,38 +205,14 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
             if state.generating || index >= crate::core::midi::gm::PATCH_NAMES.len() {
                 return Task::none();
             }
-            if state.instrument_preview_index == Some(index) && !state.instrument_preview_loading {
-                stop_instrument_preview(state);
-                state.status = "Instrument preview stopped.".to_string();
+            if state.preview_patch == Some(index)
+                || state.pending_audio == Some(AudioRequest::Preview(index))
+            {
+                cancel_preview(state);
+                state.status = "Preview stopped.".to_string();
                 return Task::none();
             }
-            pause_track_for_preview(state);
-            state.instrument_preview_index = Some(index);
-            if state.player.is_some() {
-                start_instrument_preview(state, index);
-            } else if !state.instrument_preview_loading {
-                state.instrument_preview_loading = true;
-                state.status = format!(
-                    "Preparing preview for \"{}\"…",
-                    crate::core::midi::gm::PATCH_NAMES[index]
-                );
-                return tasks::prepare_instrument_preview();
-            }
-        }
-        Message::InstrumentPreviewReady(result) => {
-            state.instrument_preview_loading = false;
-            match result {
-                Ok(Hidden(player)) => {
-                    state.player = Some(player);
-                    if let Some(index) = state.instrument_preview_index {
-                        start_instrument_preview(state, index);
-                    }
-                }
-                Err(error) => {
-                    state.instrument_preview_index = None;
-                    state.status = format!("Instrument preview is unavailable: {error}");
-                }
-            }
+            return request_audio(state, AudioRequest::Preview(index));
         }
 
         Message::SelectPreset(name) => {
@@ -282,7 +267,6 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
             if state.generating {
                 return Task::none();
             }
-            stop_instrument_preview(state);
             stop_playback(state);
             state.confirming_cache_clear = false;
             state.confirming_model_remove = false;
@@ -340,7 +324,6 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
             if index >= state.results.len() {
                 return Task::none();
             }
-            stop_instrument_preview(state);
             stop_playback(state);
             state.selected_result = Some(index);
             clear_timeline(state);
@@ -393,7 +376,27 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
             }
         }
 
-        Message::Play => return play(state),
+        Message::PlayerReady(result) => {
+            state.player_loading = false;
+            match result {
+                Ok(Hidden(player)) => {
+                    state.player = Some(player);
+                    if let Some(request) = state.pending_audio.take() {
+                        start_audio(state, request);
+                    }
+                }
+                Err(error) => {
+                    state.pending_audio = None;
+                    state.status = format!("Audio is unavailable: {error}");
+                }
+            }
+        }
+        Message::Play => {
+            if state.timeline.is_none() {
+                return Task::none();
+            }
+            return request_audio(state, AudioRequest::Track);
+        }
         Message::Pause => {
             let result = state.player.as_ref().map(|player| player.pause());
             if let Some(Err(error)) = result {
@@ -415,39 +418,30 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
                 }
             }
         }
-        Message::Tick => {
-            if state.playing {
-                let snapshot = state.player.as_ref().map(|player| player.snapshot());
-                match snapshot {
-                    Some(Ok(snapshot)) => {
-                        state.position = snapshot.position;
-                        if !snapshot.playing {
-                            state.playing = false;
-                        }
-                    }
-                    Some(Err(error)) => reset_playback(state, error),
-                    None => {
-                        state.playing = false;
-                    }
-                }
-            }
-            if state.instrument_preview_index.is_some() && !state.instrument_preview_loading {
-                let snapshot = state.player.as_ref().map(|player| player.snapshot());
-                match snapshot {
-                    Some(Ok(snapshot)) if !snapshot.playing => {
-                        state.instrument_preview_index = None;
-                        if state.status.starts_with("Previewing instrument") {
-                            state.status = "Instrument preview finished.".to_string();
-                        }
-                    }
-                    Some(Ok(_)) => {}
-                    Some(Err(error)) => reset_playback(state, error),
-                    None => state.instrument_preview_index = None,
-                }
-            }
-        }
+        Message::Tick => advance_playback(state),
     }
     Task::none()
+}
+
+/// Mirror the audio thread's progress into the state the view reads. The engine
+/// clears its own `playing` flag once a track or a preview runs out.
+fn advance_playback(state: &mut State) {
+    let Some(snapshot) = state.player.as_ref().map(|player| player.snapshot()) else {
+        state.playing = false;
+        state.preview_patch = None;
+        return;
+    };
+    let snapshot = match snapshot {
+        Ok(snapshot) => snapshot,
+        Err(error) => return reset_playback(state, error),
+    };
+    if state.playing {
+        state.position = snapshot.position;
+        state.playing = snapshot.playing;
+    }
+    if state.preview_patch.is_some() && !snapshot.playing {
+        state.preview_patch = None;
+    }
 }
 
 fn start_model_load(
@@ -492,80 +486,89 @@ fn update_whole_number(target: &mut String, value: String) {
     }
 }
 
-fn start_instrument_preview(state: &mut State, index: usize) {
+/// Start `request` right away, or queue it behind the one-time engine build.
+/// Track playback and previews share the single engine, so they share this path.
+fn request_audio(state: &mut State, request: AudioRequest) -> Task<Message> {
+    if state.player.is_some() {
+        start_audio(state, request);
+        return Task::none();
+    }
+    state.pending_audio = Some(request);
+    if state.player_loading {
+        return Task::none();
+    }
+    state.player_loading = true;
+    state.status = "Preparing audio…".to_string();
+    tasks::prepare_player()
+}
+
+fn start_audio(state: &mut State, request: AudioRequest) {
+    match request {
+        AudioRequest::Track => start_track(state),
+        AudioRequest::Preview(index) => start_preview(state, index),
+    }
+}
+
+fn start_track(state: &mut State) {
     let Some(player) = state.player.clone() else {
         return;
     };
-    let name = crate::core::midi::gm::PATCH_NAMES[index];
-    match player.preview_patch(index as u8) {
-        Ok(()) => state.status = format!("Previewing instrument \"{name}\"…"),
-        Err(error) => {
-            state.player = None;
-            state.instrument_preview_index = None;
-            state.status = format!("Instrument preview failed: {error}");
+    if state.position >= state.duration {
+        state.position = 0.0;
+    }
+    let Some(timeline) = state.timeline.as_ref() else {
+        return;
+    };
+    let result = player
+        .set_track(timeline)
+        .and_then(|()| player.play(state.position));
+    match result {
+        Ok(()) => {
+            state.preview_patch = None;
+            state.playing = true;
+            state.status = "Playing…".to_string();
         }
+        Err(error) => reset_playback(state, error),
     }
 }
 
-fn pause_track_for_preview(state: &mut State) {
-    if !state.playing {
+/// Load the audition phrase over whatever the engine held. Track playback keeps
+/// its position, because `start_track` reloads the timeline before resuming.
+fn start_preview(state: &mut State, index: usize) {
+    let Some(player) = state.player.clone() else {
         return;
-    }
-    match state.player.as_ref().map(|player| player.pause()) {
-        Some(Ok(())) => state.playing = false,
-        Some(Err(error)) => reset_playback(state, error),
-        None => state.playing = false,
+    };
+    let result = player
+        .set_track(&preview::timeline(index as u8))
+        .and_then(|()| player.play(0.0));
+    match result {
+        Ok(()) => {
+            state.playing = false;
+            state.preview_patch = Some(index);
+            state.status = format!(
+                "Previewing \"{}\"…",
+                crate::core::midi::gm::PATCH_NAMES[index]
+            );
+        }
+        Err(error) => reset_playback(state, error),
     }
 }
 
-fn stop_instrument_preview(state: &mut State) {
-    if state.instrument_preview_index.take().is_none() || state.instrument_preview_loading {
-        return;
+/// Silence a running or queued preview, leaving the track position alone.
+fn cancel_preview(state: &mut State) {
+    if matches!(state.pending_audio, Some(AudioRequest::Preview(_))) {
+        state.pending_audio = None;
     }
-    if let Some(error) = state.player.as_ref().and_then(|player| player.stop().err()) {
+    if state.preview_patch.take().is_some()
+        && let Some(error) = state.player.as_ref().and_then(|player| player.stop().err())
+    {
         reset_playback(state, error);
     }
 }
 
-fn play(state: &mut State) -> Task<Message> {
-    if state.timeline.is_none() {
-        return Task::none();
-    }
-    if state.instrument_preview_loading {
-        state.instrument_preview_index = None;
-        state.status = "Audio is still preparing; try Play again in a moment.".to_string();
-        return Task::none();
-    }
-    stop_instrument_preview(state);
-    if state.player.is_none() {
-        state.status = "Preparing audio…".to_string();
-        match tasks::create_playback_engine() {
-            Ok(engine) => state.player = Some(std::sync::Arc::new(engine)),
-            Err(error) => {
-                state.status = format!("Audio is unavailable: {error:#}");
-                return Task::none();
-            }
-        }
-    }
-    if state.position >= state.duration {
-        state.position = 0.0;
-    }
-    if let (Some(player), Some(timeline)) = (&state.player, &state.timeline) {
-        match player
-            .set_track(timeline)
-            .and_then(|()| player.play(state.position))
-        {
-            Ok(()) => {
-                state.playing = true;
-                state.status = "Playing…".to_string();
-            }
-            Err(error) => reset_playback(state, error),
-        }
-    }
-    Task::none()
-}
-
 fn stop_playback(state: &mut State) {
+    state.pending_audio = None;
+    state.preview_patch = None;
     let error = state.player.as_ref().and_then(|player| player.stop().err());
     if let Some(error) = error {
         reset_playback(state, error);
@@ -579,7 +582,8 @@ fn stop_playback(state: &mut State) {
 fn reset_playback(state: &mut State, error: anyhow::Error) {
     state.player = None;
     state.playing = false;
-    state.instrument_preview_index = None;
+    state.preview_patch = None;
+    state.pending_audio = None;
     state.status = format!("Audio playback was reset: {error}");
 }
 
@@ -635,7 +639,6 @@ fn clear_cache(state: &mut State) {
     let dir = crate::paths::cache_dir();
     let result = crate::services::token_store::clear_cache(&dir);
     state.confirming_cache_clear = false;
-    stop_instrument_preview(state);
     stop_playback(state);
     state.results.clear();
     state.result_durations.clear();
@@ -663,4 +666,96 @@ fn open_path(path: &std::path::Path) -> std::io::Result<()> {
     };
     std::process::Command::new(opener).arg(path).spawn()?;
     Ok(())
+}
+
+/// The engine is never built in these tests: they cover the request queue that
+/// keeps a click responsive while the SoundFont is still being decoded.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_preview_is_queued_and_the_engine_is_built_only_once() {
+        let mut state = State::new();
+
+        let _ = update(&mut state, Message::PreviewInstrument(24));
+        assert!(state.player_loading);
+        assert_eq!(state.pending_audio, Some(AudioRequest::Preview(24)));
+
+        let _ = update(&mut state, Message::PreviewInstrument(40));
+        assert!(state.player_loading);
+        assert_eq!(state.pending_audio, Some(AudioRequest::Preview(40)));
+    }
+
+    #[test]
+    fn a_preview_waits_for_the_engine_started_at_boot() {
+        let mut state = State::new();
+        let _ = boot(&mut state);
+
+        let _ = update(&mut state, Message::PreviewInstrument(24));
+
+        assert_eq!(state.pending_audio, Some(AudioRequest::Preview(24)));
+        assert!(state.player.is_none());
+    }
+
+    #[test]
+    fn clicking_a_queued_preview_again_cancels_it() {
+        let mut state = State::new();
+
+        let _ = update(&mut state, Message::PreviewInstrument(7));
+        let _ = update(&mut state, Message::PreviewInstrument(7));
+
+        assert_eq!(state.pending_audio, None);
+        assert_eq!(state.preview_patch, None);
+    }
+
+    #[test]
+    fn playing_the_track_takes_over_a_queued_preview() {
+        let mut state = State::new();
+        state.timeline = Some(Timeline::default());
+
+        let _ = update(&mut state, Message::PreviewInstrument(7));
+        let _ = update(&mut state, Message::Play);
+
+        assert_eq!(state.pending_audio, Some(AudioRequest::Track));
+    }
+
+    #[test]
+    fn a_failed_engine_build_reports_and_drops_the_queued_request() {
+        let mut state = State::new();
+
+        let _ = update(&mut state, Message::PreviewInstrument(7));
+        let _ = update(
+            &mut state,
+            Message::PlayerReady(Err("no audio output device".to_string())),
+        );
+
+        assert!(!state.player_loading);
+        assert_eq!(state.pending_audio, None);
+        assert_eq!(state.preview_patch, None);
+        assert!(state.status.contains("no audio output device"));
+    }
+
+    #[test]
+    fn generation_blocks_previews() {
+        let mut state = State::new();
+        state.generating = true;
+
+        let _ = update(&mut state, Message::PreviewInstrument(7));
+
+        assert!(!state.player_loading);
+        assert_eq!(state.pending_audio, None);
+    }
+
+    #[test]
+    fn a_tick_without_an_engine_clears_playback_state() {
+        let mut state = State::new();
+        state.preview_patch = Some(3);
+        state.playing = true;
+
+        let _ = update(&mut state, Message::Tick);
+
+        assert_eq!(state.preview_patch, None);
+        assert!(!state.playing);
+    }
 }

@@ -10,7 +10,7 @@ mod view;
 
 use std::time::Duration;
 
-use iced::{Size, Subscription, Task, window};
+use iced::{Size, Subscription, window};
 
 use message::Message;
 use state::State;
@@ -21,7 +21,7 @@ const ICON_SIZE: u32 = 128;
 pub(super) const INITIAL_WINDOW_WIDTH: f32 = 1_100.0;
 
 fn subscription(state: &State) -> Subscription<Message> {
-    let playback = if state.playing || state.instrument_preview_index.is_some() {
+    let playback = if state.playing || state.preview_patch.is_some() {
         iced::time::every(Duration::from_millis(50)).map(|_| Message::Tick)
     } else {
         Subscription::none()
@@ -46,7 +46,11 @@ pub fn run() -> iced::Result {
         .centered()
         .theme(|_| theme::application())
         .subscription(subscription)
-        .run_with(|| (State::new(), Task::none()))
+        .run_with(|| {
+            let mut state = State::new();
+            let boot = update::boot(&mut state);
+            (state, boot)
+        })
 }
 
 fn window_icon() -> Option<window::Icon> {

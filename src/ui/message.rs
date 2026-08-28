@@ -46,7 +46,6 @@ pub enum Message {
     Form(FormMsg),
     ToggleInstrument(usize),
     PreviewInstrument(usize),
-    InstrumentPreviewReady(Result<Hidden<Arc<PlaybackEngine>>, String>),
     InstrumentQueryInput(String),
 
     // Presets
@@ -73,6 +72,7 @@ pub enum Message {
     ConfirmCacheClear,
 
     // Player
+    PlayerReady(Result<Hidden<Arc<PlaybackEngine>>, String>),
     Play,
     Pause,
     StopPlayback,

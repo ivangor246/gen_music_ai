@@ -7,6 +7,7 @@ pub mod model_catalog;
 pub mod model_store;
 pub mod playback;
 pub mod presets;
+pub mod preview;
 pub mod synth;
 pub mod timeline;
 pub mod token_store;

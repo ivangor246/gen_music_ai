@@ -10,11 +10,16 @@ All notable changes to this project are documented in this file. The format is b
 
 - Built-in model catalog with selection, resumable download progress, checksum verification,
   explicit loading, cancellation, retry, and confirmed local removal.
-- Per-instrument audio previews in the searchable General MIDI selection list.
+- Per-instrument audio previews in the searchable General MIDI selection list: a short rolled
+  chord auditioning the patch, playable and stoppable per row.
 - Lightweight Linux, Windows, and macOS CI coverage for the external model workflow.
 
 ### Changed
 
+- The playback engine is built in the background at startup and shared by track playback and
+  instrument previews, so decoding the SoundFont neither freezes the window nor delays the first
+  Play or preview. Development builds optimize the Vorbis decoding dependencies, which cuts that
+  decode from minutes to seconds.
 - Model checkpoints are stored independently in the platform application data directory and are
   no longer compiled into release binaries; release builds embed only the SoundFont.
 - Model configuration compatibility is validated before Candle constructs the network.

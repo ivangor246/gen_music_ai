@@ -80,6 +80,17 @@ codegen-units = 16
 [profile.dev]
 debug = 0
 
+# The bundled SoundFont stores its samples as Ogg/Vorbis (SF3), and decoding
+# them unoptimized takes minutes rather than seconds -- long enough that audio
+# looks broken in development builds. Optimize just the decoding path.
+[profile.dev.package]
+byteorder = { opt-level = 3 }
+lewton = { opt-level = 3 }
+ogg = { opt-level = 3 }
+oxisynth = { opt-level = 3 }
+soundfont = { opt-level = 3 }
+tinyvec = { opt-level = 3 }
+
 [profile.test]
 debug = 0
 incremental = false
