@@ -49,12 +49,13 @@ cargo \
     --config 'patch.crates-io.oxisynth-chorus.path="target/oxisynth-work/oxisynth-chorus-0.1.0"' \
     --config 'patch.crates-io.oxisynth-reverb.path="target/oxisynth-work/oxisynth-reverb-0.1.0"' \
     --config 'patch.crates-io.soundfont.path="target/oxisynth-work/soundfont-0.1.0"' \
-    build --release --features embed
+    build --release --features embed-soundfont
 ```
 
-Omit `--features embed` for a build that loads the model checkpoint and
-SoundFont from disk. Runtime assets can be restored with
-`scripts/download-assets.sh`.
+Omit `--features embed-soundfont` for a build that loads the SoundFont from
+`assets/soundfont.sf2`. Model checkpoints are never linked into the executable;
+the application downloads selected models into its platform-specific data directory.
+Development assets can be restored with `scripts/download-assets.sh`.
 
 The full LGPL-2.1 text is in [`licenses/LGPL-2.1.txt`](licenses/LGPL-2.1.txt).
 The project's Apache-2.0 license does not restrict modification for personal

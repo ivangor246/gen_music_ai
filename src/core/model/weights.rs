@@ -1,4 +1,4 @@
-//! Load model weights from the (embedded or dev) safetensors into candle tensors.
+//! Load model weights from verified safetensors bytes into candle tensors.
 //!
 //! The checkpoint stores bf16 tensors with a plain HF-Llama key layout
 //! (`net.*`, `net_token.*`, `lm_head.weight`). We convert bf16 -> f32 once at
@@ -14,15 +14,15 @@ use half::{bf16, f16};
 use safetensors::SafeTensors;
 use safetensors::tensor::{Dtype, TensorView};
 
-use crate::assets;
-
 /// Load every tensor in `dtype` on the given device, keyed by its checkpoint
 /// name. Conversion happens one tensor at a time, so the peak stays at the
 /// asset plus the converted model rather than holding both dtypes in full.
-pub fn load_tensors(device: &Device, dtype: DType) -> Result<HashMap<String, Tensor>> {
-    let bytes = assets::model_safetensors()?;
-    let safetensors =
-        SafeTensors::deserialize(bytes.as_ref()).context("parsing model.safetensors")?;
+pub fn load_tensors(
+    bytes: &[u8],
+    device: &Device,
+    dtype: DType,
+) -> Result<HashMap<String, Tensor>> {
+    let safetensors = SafeTensors::deserialize(bytes).context("parsing model.safetensors")?;
     let mut tensors = HashMap::new();
     for (name, view) in safetensors.tensors() {
         let tensor = view_to_tensor(&view, dtype, device)
@@ -53,37 +53,4 @@ fn view_to_tensor(view: &TensorView, dtype: DType, device: &Device) -> Result<Te
         }
         _ => Tensor::from_vec(values, shape, device)?,
     })
-}
-
-#[cfg(all(test, feature = "heavy-tests"))]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn loads_expected_tensors() {
-        let _guard = super::super::HEAVY_TEST_LOCK.lock().unwrap();
-        let device = Device::Cpu;
-        let tensors = load_tensors(&device, DType::F32).unwrap();
-
-        // 110 base-net + 29 token-net + lm_head = 140 tensors.
-        assert_eq!(tensors.len(), 140);
-
-        let checks = [
-            ("lm_head.weight", vec![3406, 1024]),
-            ("net.embed_tokens.weight", vec![3406, 1024]),
-            ("net.layers.0.self_attn.q_proj.weight", vec![1024, 1024]),
-            ("net.layers.0.mlp.gate_proj.weight", vec![4096, 1024]),
-            ("net.layers.0.mlp.down_proj.weight", vec![1024, 4096]),
-            ("net.norm.weight", vec![1024]),
-            ("net_token.embed_tokens.weight", vec![3406, 1024]),
-            ("net_token.layers.0.mlp.gate_proj.weight", vec![1024, 1024]),
-            ("net_token.norm.weight", vec![1024]),
-        ];
-        for (name, shape) in checks {
-            let tensor = tensors
-                .get(name)
-                .unwrap_or_else(|| panic!("missing tensor {name}"));
-            assert_eq!(tensor.dims(), shape.as_slice(), "shape of {name}");
-        }
-    }
 }

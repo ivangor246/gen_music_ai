@@ -24,6 +24,26 @@ pub enum Field {
 }
 
 impl Field {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Field::Time1 => "time1",
+            Field::Time2 => "time2",
+            Field::Duration => "duration",
+            Field::Track => "track",
+            Field::Channel => "channel",
+            Field::Pitch => "pitch",
+            Field::Velocity => "velocity",
+            Field::Patch => "patch",
+            Field::Controller => "controller",
+            Field::Value => "value",
+            Field::Bpm => "bpm",
+            Field::Nn => "nn",
+            Field::Dd => "dd",
+            Field::Sf => "sf",
+            Field::Mi => "mi",
+        }
+    }
+
     /// Number of distinct values in the checkpoint's token range.
     pub const fn size(self) -> u32 {
         match self {

@@ -28,8 +28,17 @@ pub enum Message {
     WindowResized(f32),
 
     // Model
+    SelectModel(String),
     LoadModel,
-    ModelLoaded(Result<Hidden<Arc<MidiModel>>, String>),
+    CancelModelDownload,
+    ModelDownloadProgress(u64, u64, u64),
+    ModelDownloaded(u64, Result<(), String>),
+    ModelDownloadCancelled(u64),
+    ModelLoaded(u64, String, Result<Hidden<Arc<MidiModel>>, String>),
+    RequestModelRemoval,
+    CancelModelRemoval,
+    ConfirmModelRemoval,
+    ModelRemoved(u64, String, Result<(), String>),
     ToggleHalfPrecision(bool),
 
     // Form

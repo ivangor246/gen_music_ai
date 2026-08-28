@@ -69,13 +69,13 @@ jobs:
       - name: Install pinned Rust toolchain
         run: rustup toolchain install 1.89.0 --profile minimal
 
-      - name: Download verified runtime assets
+      - name: Download verified SoundFont
         shell: bash
         run: bash scripts/download-assets.sh
 
-      - name: Build embedded release binary
+      - name: Build release binary
         shell: bash
-        run: cargo build --release --locked --features embed --target "${{ matrix.target }}"
+        run: cargo build --release --locked --features embed-soundfont --target "${{ matrix.target }}"
 
       - name: Package binary and licensing materials
         shell: bash

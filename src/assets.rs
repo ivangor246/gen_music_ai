@@ -1,41 +1,16 @@
-//! Embedded (or dev-loaded) model and soundfont assets.
+//! Embedded (or dev-loaded) SoundFont asset.
 //!
-//! Small text configs are always embedded via `include_str!`. The large binary
-//! assets (447MB weights, 49MB soundfont) are embedded only under the `embed`
-//! feature; without it they are read from the repo at runtime to keep dev builds
-//! fast. Callers get a `Cow` so the embedded path stays zero-copy, while asset
-//! access errors are returned to the UI instead of terminating the application.
+//! Release builds embed the 49MB SoundFont. Development builds read it from the
+//! repository so ordinary code changes do not repeatedly process the asset.
+//! Model checkpoints are managed independently by `services::model_store`.
 
 use std::borrow::Cow;
 
-#[cfg(not(feature = "embed"))]
+#[cfg(not(feature = "embed-soundfont"))]
 use anyhow::Context;
 use anyhow::Result;
 
-pub const CONFIG_JSON: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/models/midi-model-tv2o-medium/config.json"
-));
-
-pub const GENERATION_CONFIG_JSON: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/models/midi-model-tv2o-medium/generation_config.json"
-));
-
-#[cfg(feature = "embed")]
-pub fn model_safetensors() -> Result<Cow<'static, [u8]>> {
-    Ok(Cow::Borrowed(include_bytes!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/models/midi-model-tv2o-medium/model.safetensors"
-    ))))
-}
-
-#[cfg(not(feature = "embed"))]
-pub fn model_safetensors() -> Result<Cow<'static, [u8]>> {
-    read_dev_asset("models/midi-model-tv2o-medium/model.safetensors").map(Cow::Owned)
-}
-
-#[cfg(feature = "embed")]
+#[cfg(feature = "embed-soundfont")]
 pub fn soundfont() -> Result<Cow<'static, [u8]>> {
     Ok(Cow::Borrowed(include_bytes!(concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -43,12 +18,12 @@ pub fn soundfont() -> Result<Cow<'static, [u8]>> {
     ))))
 }
 
-#[cfg(not(feature = "embed"))]
+#[cfg(not(feature = "embed-soundfont"))]
 pub fn soundfont() -> Result<Cow<'static, [u8]>> {
     read_dev_asset("assets/soundfont.sf2").map(Cow::Owned)
 }
 
-#[cfg(not(feature = "embed"))]
+#[cfg(not(feature = "embed-soundfont"))]
 fn read_dev_asset(relative: &str) -> Result<Vec<u8>> {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(relative);
     std::fs::read(&path).with_context(|| {
@@ -59,7 +34,7 @@ fn read_dev_asset(relative: &str) -> Result<Vec<u8>> {
     })
 }
 
-#[cfg(all(test, not(feature = "embed")))]
+#[cfg(all(test, not(feature = "embed-soundfont")))]
 mod tests {
     use super::*;
 

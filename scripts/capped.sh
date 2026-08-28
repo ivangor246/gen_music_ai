@@ -1,17 +1,6 @@
 #!/usr/bin/env bash
-# Run a command inside a memory-capped cgroup, with build and tensor-math
-# parallelism held down to match.
-#
-# Building this tree with fat LTO, or running generation, can ask for more than
-# the machine has free. Without a cap the kernel starts swapping and the desktop
-# stops responding long before the OOM killer steps in; with one, the offending
-# process is killed and nothing else notices.
-#
-#   scripts/capped.sh cargo test --release --features heavy-tests \
-#       --test bench_gen -- --ignored --nocapture
-#   scripts/capped.sh cargo run --release
-#
-# Overrides: CAP_MEMORY (e.g. 4G), CAP_JOBS, RAYON_NUM_THREADS.
+# Run a command inside a conservative, non-overridable memory cgroup.
+# The wrapper fails closed when Linux cannot enforce the limit.
 set -euo pipefail
 
 if [ $# -eq 0 ]; then
@@ -19,34 +8,45 @@ if [ $# -eq 0 ]; then
     exit 2
 fi
 
-cores=$(nproc 2>/dev/null || echo 2)
-# Half the cores, the same split src/runtime.rs applies to tensor math.
-threads=${RAYON_NUM_THREADS:-$(( cores / 2 > 0 ? cores / 2 : 1 ))}
-
-available_kib=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)
-# Leave a quarter of what is free to the rest of the system.
-limit_mib=$(( available_kib * 3 / 4 / 1024 ))
-[ "$limit_mib" -lt 2048 ] && limit_mib=2048
-
-# rustc peaks near 2 GiB per job here, so memory decides how many run at once,
-# not the core count -- one job per core is exactly what exhausts the machine.
-mem_jobs=$(( limit_mib / 2048 ))
-[ "$mem_jobs" -lt 1 ] && mem_jobs=1
-jobs=${CAP_JOBS:-$(( mem_jobs < threads ? mem_jobs : threads ))}
-
-CAP_MEMORY=${CAP_MEMORY:-${limit_mib}M}
-
-export RAYON_NUM_THREADS="$threads"
-export CARGO_BUILD_JOBS="$jobs"
-
-echo "capped: memory=${CAP_MEMORY} jobs=${jobs} threads=${threads}" >&2
-
 if ! command -v systemd-run >/dev/null 2>&1; then
-    echo "warning: systemd-run missing, running without a memory cap" >&2
-    exec "$@"
+    echo "error: systemd-run is required; refusing to run without a memory cap" >&2
+    exit 1
+fi
+if ! command -v flock >/dev/null 2>&1; then
+    echo "error: flock is required; refusing an unsafe concurrent run" >&2
+    exit 1
+fi
+if [[ -z ${XDG_RUNTIME_DIR:-} || ! -d $XDG_RUNTIME_DIR ]]; then
+    echo "error: XDG_RUNTIME_DIR is required for the safety lock" >&2
+    exit 1
 fi
 
-# MemorySwapMax=0 keeps the cap meaningful: without it the cgroup just swaps.
+exec 9>"${XDG_RUNTIME_DIR}/gen_music_ai-capped.lock"
+if ! flock -n 9; then
+    echo "error: another capped project command is already running" >&2
+    exit 1
+fi
+
+total_kib=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)
+available_kib=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)
+limit_mib=$(( total_kib / 4 / 1024 ))
+available_limit_mib=$(( available_kib / 2 / 1024 ))
+if [ "$available_limit_mib" -lt "$limit_mib" ]; then
+    limit_mib=$available_limit_mib
+fi
+if [ "$limit_mib" -lt 512 ]; then
+    echo "error: insufficient memory for a safely capped command" >&2
+    exit 1
+fi
+if [ "$limit_mib" -gt 3072 ]; then
+    limit_mib=3072
+fi
+
+export CARGO_BUILD_JOBS=1
+export RAYON_NUM_THREADS=1
+
+echo "capped: memory=${limit_mib}M jobs=1 threads=1 swap=off" >&2
+
 exec systemd-run --user --scope -q --expand-environment=no \
-    -p MemoryMax="$CAP_MEMORY" -p MemorySwapMax=0 \
+    -p MemoryMax="${limit_mib}M" -p MemorySwapMax=0 \
     -- "$@"

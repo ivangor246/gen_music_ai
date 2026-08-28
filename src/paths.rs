@@ -23,6 +23,10 @@ pub fn cache_dir() -> PathBuf {
     data_dir().join("cache")
 }
 
+pub fn models_dir() -> PathBuf {
+    data_dir().join("models")
+}
+
 pub fn presets_file() -> PathBuf {
     data_dir().join("presets.json")
 }
@@ -46,8 +50,11 @@ pub fn default_downloads_dir() -> PathBuf {
 
 pub fn ensure_runtime_directories() -> Result<()> {
     migrate_directory(&data_dir_for(LEGACY_APP_NAME), &data_dir())?;
-    let cache = cache_dir();
-    std::fs::create_dir_all(&cache).with_context(|| format!("creating {}", cache.display()))
+    for directory in [cache_dir(), models_dir()] {
+        std::fs::create_dir_all(&directory)
+            .with_context(|| format!("creating {}", directory.display()))?;
+    }
+    Ok(())
 }
 
 fn migrate_directory(legacy: &Path, current: &Path) -> Result<bool> {

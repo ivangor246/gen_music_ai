@@ -10,8 +10,8 @@ Parts of this project are based on the MIDI model implementation published by Sk
 - Source: <https://github.com/SkyTNT/midi-model>
 - License: Apache License 2.0
 
-The `midi-model-tv2o-medium` checkpoint downloaded by `scripts/download-assets.sh` is also
-published under the Apache License 2.0.
+The application catalog can download the `midi-model-tv2o-medium` checkpoint independently of
+the executable. The checkpoint is also published under the Apache License 2.0.
 
 - Model: <https://huggingface.co/skytnt/midi-model-tv2o-medium>
 
@@ -45,6 +45,14 @@ Binary distributions must include this notice, the full LGPL-2.1 text, the match
 source, and the verified OxiSynth source packages described in `RELINKING.md`. Distribution terms
 must permit modification for personal use and reverse engineering for debugging those
 modifications.
+
+## webpki-root-certs
+
+HTTPS certificate verification uses the Mozilla root certificate data distributed by
+`webpki-root-certs` 1.0.9 under the Community Data License Agreement Permissive 2.0.
+
+- Package: <https://crates.io/crates/webpki-root-certs/1.0.9>
+- License: [`licenses/CDLA-Permissive-2.0.txt`](licenses/CDLA-Permissive-2.0.txt)
 
 ## option-ext
 

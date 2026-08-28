@@ -8,6 +8,8 @@ use iced::widget::canvas;
 use crate::core::model::midi_model::MidiModel;
 use crate::services::app_settings::AppSettings;
 use crate::services::generation::{GeneratedTrack, KEY_SIGNATURES};
+use crate::services::model_catalog::{ModelCatalog, ModelDescriptor};
+use crate::services::model_store::{LocalModelState, ModelStore};
 use crate::services::playback::PlaybackEngine;
 use crate::services::presets::PresetStore;
 use crate::services::timeline::Timeline;
@@ -42,15 +44,38 @@ pub const TIME_SIGNATURES: [&str; 14] = [
 pub const CONTEXT_WINDOWS: [&str; 6] = [AUTO_VALUE, "256", "512", "1024", "2048", "4096"];
 
 pub enum ModelState {
-    NotLoaded,
+    Idle,
+    Downloading { downloaded: u64, total: u64 },
+    Cancelling,
     Loading,
-    Ready(Arc<MidiModel>),
+    Removing,
     Failed(String),
+}
+
+impl ModelState {
+    pub fn is_busy(&self) -> bool {
+        matches!(
+            self,
+            Self::Downloading { .. } | Self::Cancelling | Self::Loading | Self::Removing
+        )
+    }
+}
+
+pub struct ActiveModel {
+    pub id: String,
+    pub model: Arc<MidiModel>,
 }
 
 pub struct State {
     pub viewport_width: f32,
     pub model: ModelState,
+    pub model_catalog: Vec<ModelDescriptor>,
+    pub model_store: ModelStore,
+    pub selected_model_id: String,
+    pub active_model: Option<ActiveModel>,
+    pub model_cancel: Arc<AtomicBool>,
+    pub model_operation_id: u64,
+    pub confirming_model_remove: bool,
     pub status: String,
 
     // Form
@@ -103,13 +128,39 @@ pub struct State {
 
 impl State {
     pub fn new() -> Self {
-        let status = crate::paths::ensure_runtime_directories()
+        let directory_status = crate::paths::ensure_runtime_directories()
             .map(|()| "Ready.".to_string())
             .unwrap_or_else(|error| format!("Could not prepare application data: {error:#}"));
+        let (model_catalog, catalog_error) = match ModelCatalog::load() {
+            Ok(catalog) => (catalog.models().to_vec(), None),
+            Err(error) => (
+                Vec::new(),
+                Some(format!("Model catalog is invalid: {error:#}")),
+            ),
+        };
+        let mut app_settings = AppSettings::load();
+        let selected_model_id = app_settings
+            .selected_model_id()
+            .filter(|id| model_catalog.iter().any(|model| model.id == *id))
+            .map(str::to_owned)
+            .or_else(|| model_catalog.first().map(|model| model.id.clone()))
+            .unwrap_or_default();
+        if !selected_model_id.is_empty()
+            && app_settings.selected_model_id() != Some(selected_model_id.as_str())
+        {
+            app_settings.set_selected_model_id(selected_model_id.clone());
+        }
         Self {
             viewport_width: super::INITIAL_WINDOW_WIDTH,
-            model: ModelState::NotLoaded,
-            status,
+            model: ModelState::Idle,
+            model_catalog,
+            model_store: ModelStore::default(),
+            selected_model_id,
+            active_model: None,
+            model_cancel: Arc::new(AtomicBool::new(false)),
+            model_operation_id: 0,
+            confirming_model_remove: false,
+            status: catalog_error.unwrap_or(directory_status),
             instruments: vec![false; 128],
             instrument_query: String::new(),
             drum_kit: "None".to_string(),
@@ -144,15 +195,39 @@ impl State {
             position: 0.0,
             playing: false,
             density_cache: canvas::Cache::new(),
-            app_settings: AppSettings::load(),
+            app_settings,
         }
     }
 
     pub fn model(&self) -> Option<Arc<MidiModel>> {
-        match &self.model {
-            ModelState::Ready(model) => Some(model.clone()),
-            _ => None,
-        }
+        self.active_model
+            .as_ref()
+            .filter(|active| active.id == self.selected_model_id && !self.model.is_busy())
+            .map(|active| active.model.clone())
+    }
+
+    pub fn selected_model(&self) -> Option<&ModelDescriptor> {
+        self.model_catalog
+            .iter()
+            .find(|model| model.id == self.selected_model_id)
+    }
+
+    pub fn selected_model_state(&self) -> LocalModelState {
+        self.selected_model()
+            .map_or(LocalModelState::NotInstalled, |model| {
+                self.model_store.local_state(model)
+            })
+    }
+
+    pub fn selected_model_is_active(&self) -> bool {
+        self.active_model
+            .as_ref()
+            .is_some_and(|active| active.id == self.selected_model_id)
+    }
+
+    pub fn next_model_operation(&mut self) -> u64 {
+        self.model_operation_id = self.model_operation_id.wrapping_add(1);
+        self.model_operation_id
     }
 
     pub fn selected_instrument_count(&self) -> usize {

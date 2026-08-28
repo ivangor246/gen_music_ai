@@ -20,6 +20,7 @@ allow = [
     "Zlib",
 ]
 exceptions = [
+    { allow = ["CDLA-Permissive-2.0"], crate = "webpki-root-certs@1.0.9" },
     { allow = ["MPL-2.0"], crate = "option-ext@0.2.0" },
     { allow = ["LGPL-2.1"], crate = "oxisynth@0.1.0" },
     { allow = ["LGPL-2.1"], crate = "oxisynth-chorus@0.1.0" },

@@ -6,6 +6,21 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- Built-in model catalog with selection, resumable download progress, checksum verification,
+  explicit loading, cancellation, retry, and confirmed local removal.
+- Lightweight Linux, Windows, and macOS CI coverage for the external model workflow.
+
+### Changed
+
+- Model checkpoints are stored independently in the platform application data directory and are
+  no longer compiled into release binaries; release builds embed only the SoundFont.
+- Model configuration compatibility is validated before Candle constructs the network.
+- Removed model-loading and asset-heavy test targets that could exhaust development machines;
+  remaining tests use serialized builds, omit debug symbols, and have a fail-closed Linux cgroup
+  runner capped at 3 GiB.
+
 ## [0.1.0] - 2026-07-31
 
 ### Added

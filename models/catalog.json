@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "models": [
+    {
+      "id": "skytnt-midi-model-tv2o-medium",
+      "name": "SkyTNT tv2o-medium",
+      "description": "General-purpose MIDI generation model using the optimized tokenizer v2.",
+      "format": "tv2o-safetensors-v1",
+      "source_url": "https://huggingface.co/skytnt/midi-model-tv2o-medium/tree/0f8f265d4330f4e46527ac2313200254c5757f5f",
+      "license": "Apache-2.0",
+      "config": {
+        "url": "https://huggingface.co/skytnt/midi-model-tv2o-medium/resolve/0f8f265d4330f4e46527ac2313200254c5757f5f/config.json",
+        "size": 2016,
+        "sha256": "1f393e1e8c630ddc81a976348ee246549d613f0a117dc0622eed49918dfcb511"
+      },
+      "weights": {
+        "url": "https://huggingface.co/skytnt/midi-model-tv2o-medium/resolve/0f8f265d4330f4e46527ac2313200254c5757f5f/model.safetensors",
+        "size": 467701064,
+        "sha256": "82ac8b2217f8f66f79737e444fe60c686d3cbfee54b0c8ef717f701213bbbb83"
+      }
+    }
+  ]
+}

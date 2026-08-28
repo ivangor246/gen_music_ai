@@ -18,21 +18,17 @@ Run the lightweight local checks:
 
 ```bash
 cargo fmt --all -- --check
-cargo clippy --locked --all-targets -- -D warnings
-cargo test --locked
-cargo deny --all-features --locked check licenses
-```
-
-Run asset-heavy tests on a machine with sufficient memory after downloading the pinned assets:
-
-```bash
-bash scripts/download-assets.sh
-cargo test --locked --features heavy-tests -- --test-threads=1
+bash scripts/capped.sh cargo clippy --locked --all-targets -- -D warnings
+bash scripts/test.sh
+bash scripts/capped.sh cargo check --locked --features embed-soundfont
+bash scripts/capped.sh cargo deny --all-features --locked check licenses
 ```
 
 Trigger the Release workflow manually and inspect every generated binary archive, the source
 archive, and their checksum files. Confirm at least one generated MIDI and WAV file on each
-supported platform when suitable test machines are available.
+supported platform when suitable test machines are available. On a clean profile, confirm the
+model list appears, **Download & Load** verifies and loads the checkpoint, a paused download can
+resume, and confirmed removal deletes only the selected model.
 
 ## Publish
 

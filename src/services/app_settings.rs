@@ -1,5 +1,5 @@
-//! Persistent application settings: the last save directory and the precision
-//! the checkpoint is loaded at.
+//! Persistent application settings: save directory, model selection, and
+//! checkpoint precision.
 
 use std::path::{Path, PathBuf};
 
@@ -13,11 +13,14 @@ struct Stored {
     /// Defaulted so settings files written before this option stay readable.
     #[serde(default)]
     half_precision: bool,
+    #[serde(default)]
+    selected_model_id: Option<String>,
 }
 
 pub struct AppSettings {
     save_directory: PathBuf,
     half_precision: bool,
+    selected_model_id: Option<String>,
 }
 
 impl AppSettings {
@@ -26,6 +29,9 @@ impl AppSettings {
             .ok()
             .and_then(|text| serde_json::from_str::<Stored>(&text).ok());
         let half_precision = stored.as_ref().is_some_and(|stored| stored.half_precision);
+        let selected_model_id = stored
+            .as_ref()
+            .and_then(|stored| stored.selected_model_id.clone());
         let save_directory = stored
             .map(|stored| PathBuf::from(stored.save_directory))
             .filter(|dir| dir.is_dir())
@@ -33,6 +39,7 @@ impl AppSettings {
         Self {
             save_directory,
             half_precision,
+            selected_model_id,
         }
     }
 
@@ -56,6 +63,15 @@ impl AppSettings {
         self.persist();
     }
 
+    pub fn selected_model_id(&self) -> Option<&str> {
+        self.selected_model_id.as_deref()
+    }
+
+    pub fn set_selected_model_id(&mut self, id: String) {
+        self.selected_model_id = Some(id);
+        self.persist();
+    }
+
     fn persist(&self) {
         let path = settings_file();
         if let Some(parent) = path.parent() {
@@ -64,6 +80,7 @@ impl AppSettings {
         let stored = Stored {
             save_directory: self.save_directory.to_string_lossy().into_owned(),
             half_precision: self.half_precision,
+            selected_model_id: self.selected_model_id.clone(),
         };
         if let Ok(text) = serde_json::to_string_pretty(&stored) {
             std::fs::write(path, text).ok();
@@ -82,6 +99,7 @@ mod tests {
         let stored: Stored = serde_json::from_str(r#"{"save_directory": "/tmp"}"#).unwrap();
         assert_eq!(stored.save_directory, "/tmp");
         assert!(!stored.half_precision);
+        assert!(stored.selected_model_id.is_none());
     }
 
     #[test]
@@ -89,10 +107,12 @@ mod tests {
         let written = serde_json::to_string(&Stored {
             save_directory: "/tmp".to_string(),
             half_precision: true,
+            selected_model_id: Some("model-a".to_string()),
         })
         .unwrap();
         let read: Stored = serde_json::from_str(&written).unwrap();
         assert!(read.half_precision);
         assert_eq!(read.save_directory, "/tmp");
+        assert_eq!(read.selected_model_id.as_deref(), Some("model-a"));
     }
 }

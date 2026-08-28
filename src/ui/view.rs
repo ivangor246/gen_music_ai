@@ -7,6 +7,7 @@ use iced::widget::{
 use iced::{Alignment, Element, Length};
 
 use crate::services::generation::KEY_SIGNATURES;
+use crate::services::model_store::LocalModelState;
 use crate::settings::AUTO_VALUE;
 
 use super::instrument_browser;
@@ -24,8 +25,8 @@ pub fn view(state: &State) -> Element<'_, Message> {
     let wide_header = state.viewport_width >= WIDE_HEADER_THRESHOLD;
     let header: Element<'_, Message> = if wide_header {
         row![
-            container(model_panel(state)).width(Length::FillPortion(2)),
-            container(presets_panel(state, wide_header)).width(Length::FillPortion(3)),
+            container(model_panel(state)).width(Length::FillPortion(1)),
+            container(presets_panel(state, wide_header)).width(Length::FillPortion(1)),
         ]
         .align_y(Alignment::Center)
         .height(Length::Shrink)
@@ -67,57 +68,219 @@ fn sized_section<'a>(
 }
 
 fn model_panel(state: &State) -> Element<'_, Message> {
-    let status = match &state.model {
-        ModelState::NotLoaded => "Loaded on demand".to_string(),
-        ModelState::Loading => "Loading…".to_string(),
-        ModelState::Ready(_) => "Loaded: CPU inference".to_string(),
-        ModelState::Failed(error) => format!("Error: {error}"),
+    let selected = state.selected_model();
+    let names: Vec<String> = state
+        .model_catalog
+        .iter()
+        .map(|model| model.name.clone())
+        .collect();
+    let picker = pick_list(
+        names,
+        selected.map(|model| model.name.clone()),
+        Message::SelectModel,
+    )
+    .placeholder("No supported models")
+    .style(theme::selection)
+    .width(Length::Fill);
+
+    let local_state = state.selected_model_state();
+    let (status_text, status_kind) = model_status(state, local_state);
+    let status = match status_kind {
+        ModelStatusKind::Normal => text(status_text)
+            .size(13)
+            .style(iced::widget::text::secondary),
+        ModelStatusKind::Working => text(status_text)
+            .size(13)
+            .style(iced::widget::text::primary),
+        ModelStatusKind::Ready => text(status_text)
+            .size(13)
+            .style(iced::widget::text::success),
+        ModelStatusKind::Error => text(status_text).size(13).style(iced::widget::text::danger),
+    }
+    .width(Length::Fill);
+
+    let action: Element<'_, Message> = match &state.model {
+        ModelState::Downloading { .. } => button(text("Pause Download"))
+            .on_press(Message::CancelModelDownload)
+            .style(theme::secondary_button)
+            .into(),
+        ModelState::Cancelling => button(text("Pausing…"))
+            .style(theme::secondary_button)
+            .into(),
+        ModelState::Loading => button(text("Loading…")).style(theme::primary_button).into(),
+        ModelState::Removing => button(text("Removing…")).style(theme::danger_button).into(),
+        _ if state.selected_model_is_active() => button(text("✓  Loaded"))
+            .style(theme::primary_button)
+            .into(),
+        _ => {
+            let label = match local_state {
+                LocalModelState::NotInstalled => "↓  Download & Load",
+                LocalModelState::Partial => "↓  Resume & Load",
+                LocalModelState::Installed => "↓  Load Model",
+            };
+            let action = button(text(label)).style(theme::primary_button);
+            if selected.is_some() && !state.generating {
+                action.on_press(Message::LoadModel).into()
+            } else {
+                action.into()
+            }
+        }
     };
-    let status = text(status).size(13);
-    let status = match &state.model {
-        ModelState::NotLoaded => status.style(iced::widget::text::secondary),
-        ModelState::Loading => status.style(iced::widget::text::primary),
-        ModelState::Ready(_) => status.style(iced::widget::text::success),
-        ModelState::Failed(_) => status.style(iced::widget::text::danger),
-    };
-    let load = button(text("↓  Load Model")).style(theme::primary_button);
-    let load = if matches!(&state.model, ModelState::NotLoaded | ModelState::Failed(_)) {
-        load.on_press(Message::LoadModel)
+
+    let remove = button(text("×  Remove")).style(theme::danger_button);
+    let remove: Element<'_, Message> = if local_state != LocalModelState::NotInstalled
+        && !state.generating
+        && !state.model.is_busy()
+    {
+        remove.on_press(Message::RequestModelRemoval).into()
     } else {
-        load
+        remove.into()
     };
+
+    let controls: Element<'_, Message> =
+        if state.confirming_model_remove && !state.generating && !state.model.is_busy() {
+            column![
+                text("Remove the selected model from this device?").size(13),
+                row![
+                    button(text("Cancel"))
+                        .on_press(Message::CancelModelRemoval)
+                        .style(theme::secondary_button),
+                    button(text("Remove Model"))
+                        .on_press(Message::ConfirmModelRemoval)
+                        .style(theme::danger_button),
+                ]
+                .spacing(theme::SPACE_SM)
+                .wrap(),
+            ]
+            .spacing(theme::SPACE_SM)
+            .into()
+        } else {
+            row![action, remove].spacing(theme::SPACE_SM).wrap().into()
+        };
 
     // Switching precision rebuilds the weights, so it has to wait for any load
     // or generation already in flight.
     let precision = checkbox("Half Precision (f16)", state.app_settings.half_precision())
         .size(16)
         .text_size(13);
-    let precision = if state.generating || matches!(&state.model, ModelState::Loading) {
+    let precision = if state.generating || state.model.is_busy() {
         precision
     } else {
         precision.on_toggle(Message::ToggleHalfPrecision)
     };
 
-    sized_section(
-        "Model",
-        column![
-            row![
-                text("MIDI model (tv2o-medium)"),
-                Space::with_width(Length::Fill),
-                load,
-            ]
-            .align_y(Alignment::Center)
-            .spacing(theme::SPACE_SM),
-            status,
-            precision,
-            text("Halves memory use. Speed gain depends on the CPU.")
+    let mut body = column![
+        labeled("Available Model", picker),
+        selected
+            .map(|model| {
+                text(format!(
+                    "{} · {} · {}",
+                    format_bytes(model.download_size()),
+                    model.license,
+                    model.description
+                ))
                 .size(12)
-                .style(iced::widget::text::secondary),
-        ]
-        .spacing(theme::SPACE_SM)
-        .into(),
-        Length::Shrink,
-    )
+                .width(Length::Fill)
+                .style(iced::widget::text::secondary)
+            })
+            .unwrap_or_else(|| text("The built-in catalog could not be loaded.").size(12)),
+        status,
+    ]
+    .spacing(theme::SPACE_SM);
+
+    if let ModelState::Downloading { downloaded, total } = &state.model {
+        let fraction = if *total == 0 {
+            0.0
+        } else {
+            *downloaded as f32 / *total as f32
+        };
+        body = body.push(
+            progress_bar(0.0..=1.0, fraction.clamp(0.0, 1.0))
+                .style(theme::progress)
+                .width(Length::Fill),
+        );
+    }
+    if let Some(active) = &state.active_model
+        && active.id != state.selected_model_id
+    {
+        let name = state
+            .model_catalog
+            .iter()
+            .find(|model| model.id == active.id)
+            .map_or(active.id.as_str(), |model| model.name.as_str());
+        body = body.push(
+            text(format!(
+                "Currently loaded: {name}. Load the selection to switch."
+            ))
+            .size(12)
+            .width(Length::Fill)
+            .style(iced::widget::text::secondary),
+        );
+    }
+    body = body.push(controls).push(precision).push(
+        text("Half precision halves model memory; speed gain depends on the CPU.")
+            .size(12)
+            .width(Length::Fill)
+            .style(iced::widget::text::secondary),
+    );
+
+    sized_section("Model", body.into(), Length::Shrink)
+}
+
+enum ModelStatusKind {
+    Normal,
+    Working,
+    Ready,
+    Error,
+}
+
+fn model_status(state: &State, local: LocalModelState) -> (String, ModelStatusKind) {
+    match &state.model {
+        ModelState::Downloading { downloaded, total } if downloaded >= total => (
+            "Verifying the downloaded model…".to_string(),
+            ModelStatusKind::Working,
+        ),
+        ModelState::Downloading { downloaded, total } => (
+            format!(
+                "Downloading: {} / {}",
+                format_bytes(*downloaded),
+                format_bytes(*total)
+            ),
+            ModelStatusKind::Working,
+        ),
+        ModelState::Cancelling => (
+            "Pausing the download…".to_string(),
+            ModelStatusKind::Working,
+        ),
+        ModelState::Loading => ("Loading into memory…".to_string(), ModelStatusKind::Working),
+        ModelState::Removing => (
+            "Removing local model files…".to_string(),
+            ModelStatusKind::Working,
+        ),
+        ModelState::Failed(error) => (format!("Error: {error}"), ModelStatusKind::Error),
+        ModelState::Idle if state.selected_model_is_active() => {
+            ("Loaded: CPU inference".to_string(), ModelStatusKind::Ready)
+        }
+        ModelState::Idle => match local {
+            LocalModelState::NotInstalled => (
+                "Not downloaded; network access starts only after pressing the button.".to_string(),
+                ModelStatusKind::Normal,
+            ),
+            LocalModelState::Partial => (
+                "Download incomplete; it can be resumed.".to_string(),
+                ModelStatusKind::Normal,
+            ),
+            LocalModelState::Installed => (
+                "Downloaded and verified; not loaded into memory.".to_string(),
+                ModelStatusKind::Normal,
+            ),
+        },
+    }
+}
+
+fn format_bytes(bytes: u64) -> String {
+    const MIB: f64 = 1024.0 * 1024.0;
+    format!("{:.1} MiB", bytes as f64 / MIB)
 }
 
 fn presets_panel(state: &State, wide: bool) -> Element<'_, Message> {
@@ -340,9 +503,12 @@ fn params_panel(state: &State, wide: bool) -> Element<'_, Message> {
             .on_press(Message::CancelGeneration)
             .style(theme::danger_button)
     } else {
-        button(text("▶  Generate Tracks"))
-            .on_press(Message::Generate)
-            .style(theme::primary_button)
+        let generate = button(text("▶  Generate Tracks")).style(theme::primary_button);
+        if state.selected_model_is_active() && !state.model.is_busy() {
+            generate.on_press(Message::Generate)
+        } else {
+            generate
+        }
     };
     let status = generation_status(state);
     let controls = column![
@@ -380,7 +546,7 @@ fn generation_status(state: &State) -> Element<'_, Message> {
         || status.contains("could not")
     {
         message.style(iced::widget::text::danger).into()
-    } else if state.generating || matches!(&state.model, ModelState::Loading) {
+    } else if state.generating || state.model.is_busy() {
         message.style(iced::widget::text::primary).into()
     } else if status.contains("complete")
         || status.contains("ready")

@@ -7,9 +7,10 @@ use std::sync::atomic::AtomicBool;
 use iced::Task;
 use iced::futures::{SinkExt, StreamExt};
 
-use crate::core::model::config::ModelConfig;
 use crate::core::model::midi_model::MidiModel;
 use crate::services::generation::generate;
+use crate::services::model_catalog::ModelDescriptor;
+use crate::services::model_store::{ModelStore, was_cancelled};
 use crate::settings::GenerationRequest;
 
 use super::message::{GenEvent, Hidden, Message};
@@ -31,17 +32,84 @@ where
     Task::stream(stream)
 }
 
-/// Load the model from the configured checkpoint at the chosen precision.
-pub fn load_model(half_precision: bool) -> Task<Message> {
+/// Load a verified installed model at the chosen precision.
+pub fn load_model(
+    store: ModelStore,
+    model: ModelDescriptor,
+    half_precision: bool,
+    operation_id: u64,
+) -> Task<Message> {
     run_once(move || {
         let dtype = crate::runtime::weight_dtype(half_precision);
-        let result = ModelConfig::from_json(crate::assets::CONFIG_JSON)
-            .map_err(|error| error.to_string())
-            .and_then(|config| {
-                MidiModel::load(config, candle_core::Device::Cpu, dtype)
-                    .map_err(|error| error.to_string())
+        let id = model.id.clone();
+        let result = store
+            .load_bundle(&model)
+            .map_err(|error| format!("{error:#}"))
+            .and_then(|bundle| {
+                MidiModel::load(
+                    bundle.config,
+                    &bundle.weights,
+                    candle_core::Device::Cpu,
+                    dtype,
+                )
+                .map_err(|error| error.to_string())
             });
-        Message::ModelLoaded(result.map(|model| Hidden(Arc::new(model))))
+        Message::ModelLoaded(
+            operation_id,
+            id,
+            result.map(|model| Hidden(Arc::new(model))),
+        )
+    })
+}
+
+/// Download and verify a model without blocking the UI thread.
+pub fn download_model(
+    store: ModelStore,
+    model: ModelDescriptor,
+    cancel: Arc<AtomicBool>,
+    operation_id: u64,
+) -> Task<Message> {
+    let stream = iced::stream::channel(32, move |mut output| async move {
+        let (tx, mut rx) = iced::futures::channel::mpsc::unbounded();
+        std::thread::spawn(move || {
+            cancel.store(false, std::sync::atomic::Ordering::Relaxed);
+            let progress_tx = tx.clone();
+            let result = store.download(&model, &cancel, move |downloaded, total| {
+                let _ = progress_tx.unbounded_send(Message::ModelDownloadProgress(
+                    operation_id,
+                    downloaded,
+                    total,
+                ));
+            });
+            let message = match result {
+                Ok(()) => Message::ModelDownloaded(operation_id, Ok(())),
+                Err(error) if was_cancelled(&error) => {
+                    Message::ModelDownloadCancelled(operation_id)
+                }
+                Err(error) => Message::ModelDownloaded(operation_id, Err(format!("{error:#}"))),
+            };
+            let _ = tx.unbounded_send(message);
+        });
+
+        while let Some(message) = rx.next().await {
+            let done = matches!(
+                message,
+                Message::ModelDownloaded(_, _) | Message::ModelDownloadCancelled(_)
+            );
+            let _ = output.send(message).await;
+            if done {
+                break;
+            }
+        }
+    });
+    Task::stream(stream)
+}
+
+pub fn remove_model(store: ModelStore, model: ModelDescriptor, operation_id: u64) -> Task<Message> {
+    run_once(move || {
+        let id = model.id.clone();
+        let result = store.remove(&model).map_err(|error| format!("{error:#}"));
+        Message::ModelRemoved(operation_id, id, result)
     })
 }
 

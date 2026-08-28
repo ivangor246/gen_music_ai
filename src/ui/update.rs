@@ -6,44 +6,176 @@ use iced::Task;
 
 use crate::services::export_midi::save_midi;
 use crate::services::export_wav::save_wav;
+use crate::services::model_catalog::ModelDescriptor;
+use crate::services::model_store::LocalModelState;
 use crate::services::playback::PlaybackEngine;
 use crate::services::timeline::Timeline;
 
 use super::message::{FormMsg, Hidden, Message};
-use super::state::{MAX_INSTRUMENTS, ModelState, State};
+use super::state::{ActiveModel, MAX_INSTRUMENTS, ModelState, State};
 use super::tasks;
 
 pub fn update(state: &mut State, message: Message) -> Task<Message> {
     match message {
         Message::WindowResized(width) => state.viewport_width = width,
 
-        Message::LoadModel => {
-            if matches!(&state.model, ModelState::Loading | ModelState::Ready(_)) {
+        Message::SelectModel(name) => {
+            if state.generating || state.model.is_busy() {
                 return Task::none();
             }
-            state.model = ModelState::Loading;
-            state.status = "Loading the model into memory…".to_string();
-            return tasks::load_model(state.app_settings.half_precision());
+            let Some(model) = state.model_catalog.iter().find(|model| model.name == name) else {
+                return Task::none();
+            };
+            state.selected_model_id = model.id.clone();
+            state.app_settings.set_selected_model_id(model.id.clone());
+            state.confirming_model_remove = false;
+            if matches!(&state.model, ModelState::Failed(_)) {
+                state.model = ModelState::Idle;
+            }
+            state.status = format!("Selected model \"{}\".", model.name);
         }
-        Message::ModelLoaded(Ok(Hidden(model))) => {
-            state.model = ModelState::Ready(model);
-            state.status = "The model is ready to generate.".to_string();
+        Message::LoadModel => {
+            if state.generating || state.model.is_busy() || state.selected_model_is_active() {
+                return Task::none();
+            }
+            let Some(model) = state.selected_model().cloned() else {
+                state.status = "No supported model is available.".to_string();
+                return Task::none();
+            };
+            let operation_id = state.next_model_operation();
+            state.confirming_model_remove = false;
+            state.model_cancel.store(false, Ordering::Relaxed);
+            if state.model_store.local_state(&model) == LocalModelState::Installed {
+                return start_model_load(
+                    state,
+                    model,
+                    operation_id,
+                    "Loading the model into memory…",
+                );
+            }
+            state.model = ModelState::Downloading {
+                downloaded: 0,
+                total: model.download_size(),
+            };
+            state.status = format!("Downloading {}…", model.name);
+            return tasks::download_model(
+                state.model_store.clone(),
+                model,
+                state.model_cancel.clone(),
+                operation_id,
+            );
         }
-        Message::ModelLoaded(Err(error)) => {
-            state.status = format!("Failed to load the model: {error}");
-            state.model = ModelState::Failed(error);
+        Message::CancelModelDownload => {
+            if matches!(&state.model, ModelState::Downloading { .. }) {
+                state.model_cancel.store(true, Ordering::Relaxed);
+                state.model = ModelState::Cancelling;
+                state.status = "Pausing the model download…".to_string();
+            }
+        }
+        Message::ModelDownloadProgress(operation_id, downloaded, total) => {
+            if operation_id == state.model_operation_id
+                && matches!(&state.model, ModelState::Downloading { .. })
+            {
+                state.model = ModelState::Downloading { downloaded, total };
+            }
+        }
+        Message::ModelDownloaded(operation_id, Ok(())) => {
+            if operation_id != state.model_operation_id {
+                return Task::none();
+            }
+            let Some(model) = state.selected_model().cloned() else {
+                state.model = ModelState::Failed("Selected model disappeared.".to_string());
+                return Task::none();
+            };
+            return start_model_load(
+                state,
+                model,
+                operation_id,
+                "Download verified. Loading the model into memory…",
+            );
+        }
+        Message::ModelDownloaded(operation_id, Err(error)) => {
+            if operation_id == state.model_operation_id {
+                state.status = format!("Failed to download the model: {error}");
+                state.model = ModelState::Failed(error);
+            }
+        }
+        Message::ModelDownloadCancelled(operation_id) => {
+            if operation_id == state.model_operation_id {
+                state.model = ModelState::Idle;
+                state.status = "Model download paused; it can be resumed later.".to_string();
+            }
+        }
+        Message::ModelLoaded(operation_id, id, Ok(Hidden(model))) => {
+            if operation_id == state.model_operation_id && id == state.selected_model_id {
+                state.active_model = Some(ActiveModel { id, model });
+                state.model = ModelState::Idle;
+                state.status = "The selected model is ready to generate.".to_string();
+            }
+        }
+        Message::ModelLoaded(operation_id, _, Err(error)) => {
+            if operation_id == state.model_operation_id {
+                state.status = format!("Failed to load the model: {error}");
+                state.model = ModelState::Failed(error);
+            }
+        }
+        Message::RequestModelRemoval => {
+            if !state.generating
+                && !state.model.is_busy()
+                && state.selected_model_state() != LocalModelState::NotInstalled
+            {
+                state.confirming_model_remove = true;
+            }
+        }
+        Message::CancelModelRemoval => state.confirming_model_remove = false,
+        Message::ConfirmModelRemoval => {
+            if state.generating || state.model.is_busy() {
+                return Task::none();
+            }
+            let Some(model) = state.selected_model().cloned() else {
+                return Task::none();
+            };
+            state.confirming_model_remove = false;
+            if state.selected_model_is_active() {
+                state.active_model = None;
+            }
+            let operation_id = state.next_model_operation();
+            state.model = ModelState::Removing;
+            state.status = format!("Removing {}…", model.name);
+            return tasks::remove_model(state.model_store.clone(), model, operation_id);
+        }
+        Message::ModelRemoved(operation_id, id, result) => {
+            if operation_id != state.model_operation_id || id != state.selected_model_id {
+                return Task::none();
+            }
+            match result {
+                Ok(()) => {
+                    state.model = ModelState::Idle;
+                    state.status = "Downloaded model files removed.".to_string();
+                }
+                Err(error) => {
+                    state.status = format!("Failed to remove model files: {error}");
+                    state.model = ModelState::Failed(error);
+                }
+            }
         }
         Message::ToggleHalfPrecision(enabled) => {
-            if state.generating || matches!(state.model, ModelState::Loading) {
+            if state.generating || state.model.is_busy() {
                 return Task::none();
             }
             state.app_settings.set_half_precision(enabled);
             // Precision is baked into the weights at load time, so an already
             // loaded model has to be dropped and read again.
-            if matches!(state.model, ModelState::Ready(_)) {
-                state.model = ModelState::Loading;
-                state.status = "Reloading the model at the new precision…".to_string();
-                return tasks::load_model(enabled);
+            if state.selected_model_is_active()
+                && let Some(model) = state.selected_model().cloned()
+            {
+                let operation_id = state.next_model_operation();
+                return start_model_load(
+                    state,
+                    model,
+                    operation_id,
+                    "Reloading the model at the new precision…",
+                );
             }
         }
 
@@ -116,6 +248,7 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
             }
             stop_playback(state);
             state.confirming_cache_clear = false;
+            state.confirming_model_remove = false;
             state.generating = true;
             state.progress = 0.0;
             state.status = "Generating…".to_string();
@@ -263,6 +396,23 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
         }
     }
     Task::none()
+}
+
+fn start_model_load(
+    state: &mut State,
+    model: ModelDescriptor,
+    operation_id: u64,
+    status: &str,
+) -> Task<Message> {
+    state.active_model = None;
+    state.model = ModelState::Loading;
+    state.status = status.to_string();
+    tasks::load_model(
+        state.model_store.clone(),
+        model,
+        state.app_settings.half_precision(),
+        operation_id,
+    )
 }
 
 fn apply_form(state: &mut State, form: FormMsg) {

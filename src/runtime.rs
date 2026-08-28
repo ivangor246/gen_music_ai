@@ -3,8 +3,7 @@
 //! Generation is memory-bandwidth bound and will happily saturate every core
 //! and every spare gigabyte, which on a small machine leaves nothing for the
 //! desktop and can push the whole system into swap. Every decision about how
-//! much of the machine to take lives here, so the app and the heavy tests make
-//! the same one.
+//! much of the machine to take lives here.
 
 use std::sync::OnceLock;
 
@@ -22,13 +21,11 @@ const CACHE_MEMORY_SHARE: usize = 2;
 ///
 /// f16 halves both the resident model (933 MiB -> 466 MiB) and the bytes read
 /// per decode step. CPU generation is bound by that traffic rather than by
-/// arithmetic, so it is the one lever that moves the decode step directly. f32
-/// is the reference precision `tests/parity.rs` checks, and f16 throughput
-/// depends on the CPU having usable native support -- hence a user choice
-/// rather than a default.
+/// arithmetic, so it is the one lever that moves the decode step directly. f16
+/// throughput depends on the CPU having usable native support -- hence a user
+/// choice rather than a default.
 ///
-/// `MIDI_MODEL_DTYPE` overrides `half_precision`, which is how the benchmark
-/// and the heavy tests pick a precision without going through the interface.
+/// `MIDI_MODEL_DTYPE` overrides `half_precision` for headless profiling.
 pub fn weight_dtype(half_precision: bool) -> DType {
     match std::env::var("MIDI_MODEL_DTYPE").as_deref() {
         Ok("f16") => DType::F16,
@@ -138,7 +135,8 @@ mod tests {
     use super::*;
 
     fn config() -> ModelConfig {
-        ModelConfig::from_json(crate::assets::CONFIG_JSON).unwrap()
+        ModelConfig::from_compatible_json(crate::services::model_catalog::DEFAULT_CONFIG_JSON)
+            .unwrap()
     }
 
     #[test]

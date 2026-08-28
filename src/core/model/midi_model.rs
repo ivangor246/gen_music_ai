@@ -20,10 +20,9 @@ pub struct MidiModel {
 
 impl MidiModel {
     /// Load the checkpoint in `dtype`. f16 halves both the resident weights and
-    /// the bytes read per decode step, which is what CPU generation is bound by;
-    /// f32 is the reference precision `tests/parity.rs` checks.
-    pub fn load(config: ModelConfig, device: Device, dtype: DType) -> Result<Self> {
-        let tensors = weights::load_tensors(&device, dtype)
+    /// the bytes read per decode step, which is what CPU generation is bound by.
+    pub fn load(config: ModelConfig, weights: &[u8], device: Device, dtype: DType) -> Result<Self> {
+        let tensors = weights::load_tensors(weights, &device, dtype)
             .map_err(|e| candle_core::Error::Msg(format!("loading weights: {e}")))?;
         let vb = VarBuilder::from_tensors(tensors, dtype, &device);
         let base = LlamaStack::new(&config.net, &device, vb.pp("net"))?;
@@ -98,44 +97,5 @@ impl MidiModel {
         self.lm_head
             .forward(&last_position(&hidden)?)?
             .to_dtype(DType::F32)
-    }
-}
-
-#[cfg(all(test, feature = "heavy-tests"))]
-mod tests {
-    use super::*;
-    use crate::assets;
-
-    #[test]
-    fn forward_produces_expected_shapes() {
-        let _guard = super::super::HEAVY_TEST_LOCK.lock().unwrap();
-        let config = ModelConfig::from_json(assets::CONFIG_JSON).unwrap();
-        let device = Device::Cpu;
-        let model = MidiModel::load(config, device.clone(), DType::F32).unwrap();
-
-        // 1 batch, 2 events (bos row + a set_tempo-shaped row), 8 sub-tokens each.
-        let ids = Tensor::from_vec(
-            vec![
-                1u32, 0, 0, 0, 0, 0, 0, 0, // bos
-                6, 9, 137, 2201, 2985, 0, 0, 0, // set_tempo-ish
-            ],
-            (1, 2, 8),
-            &device,
-        )
-        .unwrap();
-
-        let mut base_cache = model.base_cache(2);
-        let hidden = model.base_forward(&ids, &mut base_cache).unwrap();
-        assert_eq!(hidden.dims(), &[1, 1024]);
-
-        let mut token_cache = model.token_cache(8);
-        let logits = model
-            .token_logits_from_hidden(&hidden, &mut token_cache)
-            .unwrap();
-        assert_eq!(logits.dims(), &[1, 3406]);
-
-        let prev = Tensor::from_vec(vec![6u32], (1, 1), &device).unwrap();
-        let next = model.token_logits_from_id(&prev, &mut token_cache).unwrap();
-        assert_eq!(next.dims(), &[1, 3406]);
     }
 }

@@ -4,6 +4,7 @@
 # Large model weights and soundfont. Small model configs remain tracked so a
 # fresh clone can compile before the runtime assets are downloaded.
 /models/*
+!/models/catalog.json
 !/models/midi-model-tv2o-medium/
 /models/midi-model-tv2o-medium/*
 !/models/midi-model-tv2o-medium/config.json
