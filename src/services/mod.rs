@@ -3,6 +3,7 @@ pub mod atomic;
 pub mod export_midi;
 pub mod export_wav;
 pub mod generation;
+pub mod midi_gpt_generation;
 pub mod model_catalog;
 pub mod model_store;
 pub mod playback;

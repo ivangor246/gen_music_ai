@@ -18,6 +18,24 @@
         "size": 467701064,
         "sha256": "82ac8b2217f8f66f79737e444fe60c686d3cbfee54b0c8ef717f701213bbbb83"
       }
+    },
+    {
+      "id": "metacreation-midi-gpt-yellow-small",
+      "name": "MIDI-GPT Yellow Small",
+      "description": "CPU-friendly multi-track GPT-2 model. Fixed four-bar context; uses selected instruments, drums, meter, density, and sampling controls. Tempo/key are applied to output; Yellow does not generate CC.",
+      "format": "midi-gpt-yellow-safetensors-v2",
+      "source_url": "https://huggingface.co/Metacreation/MIDI-GPT/tree/3aa5748ba68e32a43c70ddc66b5e595069484532",
+      "license": "CC-BY-NC-4.0",
+      "config": {
+        "url": "https://huggingface.co/Metacreation/MIDI-GPT/resolve/3aa5748ba68e32a43c70ddc66b5e595069484532/yellow_encoder.json",
+        "size": 3005,
+        "sha256": "e34244d78e2aa7dfacf9f31172b5867655312252036e52f14f97d807728c8b2f"
+      },
+      "weights": {
+        "url": "https://huggingface.co/Metacreation/MIDI-GPT/resolve/3aa5748ba68e32a43c70ddc66b5e595069484532/yellow_small-final.safetensors",
+        "size": 82515744,
+        "sha256": "4bd7c021bf1bcc14eb8eb94a242f0d6aaa700950e3888c1bac8140275d63e6ee"
+      }
     }
   ]
 }

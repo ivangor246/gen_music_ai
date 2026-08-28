@@ -4,9 +4,10 @@ use std::collections::HashSet;
 
 use anyhow::{Context, Result, bail};
 use reqwest::Url;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-pub const SUPPORTED_FORMAT: &str = "tv2o-safetensors-v1";
+pub const TV2O_FORMAT: &str = "tv2o-safetensors-v1";
+pub const MIDI_GPT_FORMAT: &str = "midi-gpt-yellow-safetensors-v2";
 const CATALOG_SCHEMA_VERSION: u32 = 1;
 const MAX_CONFIG_SIZE: u64 = 1024 * 1024;
 const MAX_WEIGHTS_SIZE: u64 = 16 * 1024 * 1024 * 1024;
@@ -32,11 +33,41 @@ pub struct ModelDescriptor {
     pub id: String,
     pub name: String,
     pub description: String,
-    pub format: String,
+    pub format: ModelFormat,
     pub source_url: String,
     pub license: String,
     pub config: ModelArtifact,
     pub weights: ModelArtifact,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ModelFormat {
+    #[serde(rename = "tv2o-safetensors-v1")]
+    Tv2o,
+    #[serde(rename = "midi-gpt-yellow-safetensors-v2")]
+    MidiGptYellow,
+}
+
+impl ModelFormat {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Tv2o => TV2O_FORMAT,
+            Self::MidiGptYellow => MIDI_GPT_FORMAT,
+        }
+    }
+
+    pub const fn max_tracks(self) -> usize {
+        match self {
+            Self::Tv2o => 15,
+            Self::MidiGptYellow => 12,
+        }
+    }
+}
+
+impl std::fmt::Display for ModelFormat {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.as_str())
+    }
 }
 
 impl ModelDescriptor {
@@ -113,13 +144,6 @@ fn validate_model(model: &ModelDescriptor) -> Result<()> {
     {
         bail!("model `{}` has incomplete display metadata", model.id);
     }
-    if model.format != SUPPORTED_FORMAT {
-        bail!(
-            "model `{}` uses unsupported format `{}`",
-            model.id,
-            model.format
-        );
-    }
     validate_https_url(&model.source_url)
         .with_context(|| format!("invalid source URL for `{}`", model.id))?;
     validate_artifact("config", &model.config, MAX_CONFIG_SIZE)
@@ -180,6 +204,8 @@ mod tests {
         let model = catalog.default_model();
         assert_eq!(model.id, "skytnt-midi-model-tv2o-medium");
         assert_eq!(model.weights.size, 467_701_064);
+        assert_eq!(catalog.models().len(), 2);
+        assert_eq!(catalog.models()[1].format, ModelFormat::MidiGptYellow);
     }
 
     #[test]

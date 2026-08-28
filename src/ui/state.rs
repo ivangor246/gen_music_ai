@@ -5,15 +5,15 @@ use std::sync::atomic::AtomicBool;
 
 use iced::widget::canvas;
 
-use crate::core::model::midi_model::MidiModel;
+use crate::core::model::backend::GenerativeModel;
 use crate::services::app_settings::AppSettings;
 use crate::services::generation::{GeneratedTrack, KEY_SIGNATURES};
-use crate::services::model_catalog::{ModelCatalog, ModelDescriptor};
+use crate::services::model_catalog::{ModelCatalog, ModelDescriptor, ModelFormat};
 use crate::services::model_store::{LocalModelState, ModelStore};
 use crate::services::playback::PlaybackEngine;
 use crate::services::presets::PresetStore;
 use crate::services::timeline::Timeline;
-use crate::settings::{AUTO_VALUE, GenerationRequest, GenerationSettings};
+use crate::settings::{AUTO_VALUE, DEFAULT_RESULT_COUNT, GenerationRequest, GenerationSettings};
 
 pub const MAX_INSTRUMENTS: usize = 15;
 const MAX_BPM: u16 = 383;
@@ -63,7 +63,7 @@ impl ModelState {
 
 pub struct ActiveModel {
     pub id: String,
-    pub model: Arc<MidiModel>,
+    pub model: Arc<GenerativeModel>,
 }
 
 /// What to start once the playback engine is ready. Building it decodes the
@@ -184,7 +184,7 @@ impl State {
             temperature: 1.0,
             top_p: 0.94,
             top_k: "28".to_string(),
-            batch: "4".to_string(),
+            batch: DEFAULT_RESULT_COUNT.to_string(),
             seed: "0".to_string(),
             random_seed: true,
             allow_cc: true,
@@ -213,7 +213,7 @@ impl State {
         }
     }
 
-    pub fn model(&self) -> Option<Arc<MidiModel>> {
+    pub fn model(&self) -> Option<Arc<GenerativeModel>> {
         self.active_model
             .as_ref()
             .filter(|active| active.id == self.selected_model_id && !self.model.is_busy())
@@ -317,6 +317,26 @@ impl State {
             parse_number("Seed", &self.seed)?
         };
         let settings = self.settings()?;
+        if self
+            .selected_model()
+            .is_some_and(|model| model.format == ModelFormat::MidiGptYellow)
+        {
+            let tracks = settings.instruments.len()
+                + usize::from(
+                    crate::services::generation::drum_kit_program(&settings.drum_kit) >= 0,
+                );
+            if tracks == 0 {
+                return Err(
+                    "MIDI-GPT requires at least one selected instrument or drum kit.".to_string(),
+                );
+            }
+            if tracks > ModelFormat::MidiGptYellow.max_tracks() {
+                return Err(format!(
+                    "MIDI-GPT supports no more than {} instrument and drum tracks.",
+                    ModelFormat::MidiGptYellow.max_tracks()
+                ));
+            }
+        }
         let batch_size = parse_in_range("Result Count", &self.batch, 1, MAX_RESULTS)?;
         validate_event_budget(&settings, batch_size)?;
         Ok(GenerationRequest {

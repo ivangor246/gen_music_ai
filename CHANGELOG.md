@@ -8,6 +8,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Added
 
+- MIDI-GPT Yellow Small support with a native Candle GPT-2 backend, constrained four-bar
+  generation, multi-track conditioning, and conversion into the shared playback/MIDI/WAV workflow.
 - Built-in model catalog with selection, resumable download progress, checksum verification,
   explicit loading, cancellation, retry, and confirmed local removal.
 - Per-instrument audio previews in the searchable General MIDI selection list: a short rolled

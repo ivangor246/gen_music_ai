@@ -7,10 +7,12 @@ use std::sync::atomic::AtomicBool;
 use iced::Task;
 use iced::futures::{SinkExt, StreamExt};
 
+use crate::core::model::backend::GenerativeModel;
+use crate::core::model::midi_gpt::MidiGptModel;
 use crate::core::model::midi_model::MidiModel;
 use crate::services::generation::generate;
 use crate::services::model_catalog::ModelDescriptor;
-use crate::services::model_store::{ModelStore, was_cancelled};
+use crate::services::model_store::{ModelBundle, ModelStore, was_cancelled};
 use crate::services::playback::PlaybackEngine;
 use crate::settings::GenerationRequest;
 
@@ -60,12 +62,16 @@ pub fn load_model(
             .load_bundle(&model)
             .map_err(|error| format!("{error:#}"))
             .and_then(|bundle| {
-                MidiModel::load(
-                    bundle.config,
-                    &bundle.weights,
-                    candle_core::Device::Cpu,
-                    dtype,
-                )
+                match bundle {
+                    ModelBundle::Tv2o { config, weights } => {
+                        MidiModel::load(config, &weights, candle_core::Device::Cpu, dtype)
+                            .map(GenerativeModel::Tv2o)
+                    }
+                    ModelBundle::MidiGpt { config, weights } => {
+                        MidiGptModel::load(config, &weights, candle_core::Device::Cpu, dtype)
+                            .map(GenerativeModel::MidiGpt)
+                    }
+                }
                 .map_err(|error| error.to_string())
             });
         Message::ModelLoaded(
@@ -129,7 +135,7 @@ pub fn remove_model(store: ModelStore, model: ModelDescriptor, operation_id: u64
 
 /// Stream generation progress + final result from a worker thread.
 pub fn generate_task(
-    model: Arc<MidiModel>,
+    model: Arc<GenerativeModel>,
     request: GenerationRequest,
     cancel: Arc<AtomicBool>,
 ) -> Task<Message> {
@@ -139,9 +145,15 @@ pub fn generate_task(
             cancel.store(false, std::sync::atomic::Ordering::Relaxed);
             let cache = crate::paths::cache_dir();
             let progress_tx = tx.clone();
-            let result = generate(&model, &request, &cache, &cancel, move |current, total| {
-                let _ = progress_tx.unbounded_send(GenEvent::Progress(current, total));
-            });
+            let result = generate(
+                model.as_ref(),
+                &request,
+                &cache,
+                &cancel,
+                move |current, total| {
+                    let _ = progress_tx.unbounded_send(GenEvent::Progress(current, total));
+                },
+            );
             let finished = match result {
                 Ok(output) => GenEvent::Finished(Ok(Hidden(output))),
                 Err(err) => GenEvent::Finished(Err(err.to_string())),

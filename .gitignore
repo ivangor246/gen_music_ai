@@ -9,6 +9,9 @@
 /models/midi-model-tv2o-medium/*
 !/models/midi-model-tv2o-medium/config.json
 !/models/midi-model-tv2o-medium/generation_config.json
+!/models/midi-gpt-yellow/
+/models/midi-gpt-yellow/*
+!/models/midi-gpt-yellow/encoder.json
 /assets/soundfont.sf2
 
 # Backup files

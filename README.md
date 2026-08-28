@@ -30,6 +30,8 @@ Generation runs entirely on the CPU and does not require a GPU or a remote infer
   history in memory.
 - Select a compatible model from the built-in catalog and download, pause, resume, load, switch,
   or remove it without reinstalling the application.
+- Generate with either the dual-Llama SkyTNT backend or the smaller GPT-2-based MIDI-GPT Yellow
+  backend through the same configuration, playback, and export workflow.
 
 ## Download
 
@@ -51,8 +53,8 @@ confirmation before the first launch.
 
 ## Runtime Notes
 
-- A 64-bit x86 processor and approximately 450 MB of disk space per installed model, in addition
-  to temporary download and generation files.
+- A 64-bit x86 processor and 80–450 MB of disk space per installed model, in addition to temporary
+  download and generation files.
 - An internet connection for the first model download; generation remains fully local afterward.
 - An audio output device for live playback and WAV rendering.
 - A GPU is neither required nor currently used.
@@ -61,6 +63,13 @@ Model loading and generation require substantially more memory than the checkpoi
 the model weights are converted to `f32` for CPU inference. Larger result counts and musical
 memory settings increase peak memory use. Generation speed depends on the CPU and selected
 settings.
+
+MIDI-GPT Yellow generates selected tracks in four-bar windows and supports up to 12 melodic and
+drum tracks. Its density control is driven by **Event Budget per Bar**. Tempo and key signature are
+applied when the generated notes enter the shared project timeline; the Yellow checkpoint itself
+does not condition on them. **Musical Memory** is fixed at four bars for this backend, and Yellow
+does not generate control-change events. The downloaded MIDI-GPT weights are licensed CC BY-NC
+4.0 and are for non-commercial use only.
 
 On a machine short on memory, enable **Half Precision (f16)** in the Model panel. This halves
 both the resident weights (about 933 MB down to 466 MB) and the attention caches. Decoding is

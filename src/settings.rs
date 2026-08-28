@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 pub const AUTO_VALUE: &str = "Auto";
+pub const DEFAULT_RESULT_COUNT: usize = 1;
 pub const TICKS_PER_QUARTER: i64 = 480;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -124,9 +125,19 @@ impl Default for GenerationRequest {
     fn default() -> Self {
         Self {
             settings: GenerationSettings::default(),
-            batch_size: 4,
+            batch_size: DEFAULT_RESULT_COUNT,
             seed: 0,
             random_seed: true,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generation_request_defaults_to_one_result() {
+        assert_eq!(GenerationRequest::default().batch_size, 1);
     }
 }

@@ -13,10 +13,11 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::core::model::config::ModelConfig;
+use crate::core::model::midi_gpt::MidiGptConfig;
 use crate::paths::models_dir;
 
 use super::atomic::atomic_write;
-use super::model_catalog::{ModelArtifact, ModelDescriptor};
+use super::model_catalog::{ModelArtifact, ModelDescriptor, ModelFormat};
 
 const CONFIG_FILE: &str = "config.json";
 const WEIGHTS_FILE: &str = "model.safetensors";
@@ -31,9 +32,15 @@ pub enum LocalModelState {
     Installed,
 }
 
-pub struct ModelBundle {
-    pub config: ModelConfig,
-    pub weights: Vec<u8>,
+pub enum ModelBundle {
+    Tv2o {
+        config: ModelConfig,
+        weights: Vec<u8>,
+    },
+    MidiGpt {
+        config: MidiGptConfig,
+        weights: Vec<u8>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -44,7 +51,7 @@ pub struct ModelStore {
 #[derive(Serialize, Deserialize)]
 struct InstallRecord {
     id: String,
-    format: String,
+    format: ModelFormat,
     config_sha256: String,
     weights_sha256: String,
 }
@@ -117,7 +124,7 @@ impl ModelStore {
 
         let record = InstallRecord {
             id: model.id.clone(),
-            format: model.format.clone(),
+            format: model.format,
             config_sha256: model.config.sha256.clone(),
             weights_sha256: model.weights.sha256.clone(),
         };
@@ -134,9 +141,17 @@ impl ModelStore {
         let directory = self.model_dir(model);
         let config_bytes = read_verified(&directory.join(CONFIG_FILE), &model.config)?;
         let config_json = std::str::from_utf8(&config_bytes).context("config.json is not UTF-8")?;
-        let config = ModelConfig::from_compatible_json(config_json)?;
         let weights = read_verified(&directory.join(WEIGHTS_FILE), &model.weights)?;
-        Ok(ModelBundle { config, weights })
+        match model.format {
+            ModelFormat::Tv2o => Ok(ModelBundle::Tv2o {
+                config: ModelConfig::from_compatible_json(config_json)?,
+                weights,
+            }),
+            ModelFormat::MidiGptYellow => Ok(ModelBundle::MidiGpt {
+                config: MidiGptConfig::from_json(config_json)?,
+                weights,
+            }),
+        }
     }
 
     pub fn remove(&self, model: &ModelDescriptor) -> Result<()> {
@@ -443,7 +458,7 @@ mod tests {
     use std::sync::atomic::AtomicBool;
 
     use super::*;
-    use crate::services::model_catalog::{ModelCatalog, SUPPORTED_FORMAT};
+    use crate::services::model_catalog::{ModelCatalog, ModelFormat};
 
     fn temp_store() -> (PathBuf, ModelStore) {
         let root = std::env::temp_dir().join(format!(
@@ -459,7 +474,7 @@ mod tests {
             id: "fixture-model".to_string(),
             name: "Fixture".to_string(),
             description: "Fixture".to_string(),
-            format: SUPPORTED_FORMAT.to_string(),
+            format: ModelFormat::Tv2o,
             source_url: "https://example.com/model".to_string(),
             license: "Apache-2.0".to_string(),
             config: ModelArtifact {
@@ -498,7 +513,7 @@ mod tests {
 
         let record = InstallRecord {
             id: model.id.clone(),
-            format: model.format.clone(),
+            format: model.format,
             config_sha256: model.config.sha256.clone(),
             weights_sha256: model.weights.sha256.clone(),
         };

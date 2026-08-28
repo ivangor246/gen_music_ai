@@ -26,6 +26,22 @@ pinned revision of the upstream SkyTNT asset repository and is not relicensed by
 - License and attribution text:
   [`licenses/MUSESCORE_GENERAL_HQ-MIT.txt`](licenses/MUSESCORE_GENERAL_HQ-MIT.txt)
 
+## MIDI-GPT
+
+This project includes an independent Candle implementation of the GPT-2 inference architecture
+and Yellow tokenizer grammar used by MIDI-GPT. The upstream MIDI-GPT source is MIT-licensed.
+
+- Source: <https://github.com/metacreation/MIDI-GPT>
+- Source license: MIT
+
+The application catalog downloads the pinned `yellow_small-final.safetensors` checkpoint directly
+from the upstream Hugging Face repository. The weights are not part of this repository or binary
+distribution and remain licensed under Creative Commons Attribution-NonCommercial 4.0
+International (CC BY-NC 4.0). They may not be used for commercial purposes.
+
+- Model: <https://huggingface.co/Metacreation/MIDI-GPT>
+- Model license: <https://creativecommons.org/licenses/by-nc/4.0/>
+
 ## OxiSynth
 
 Audio synthesis uses OxiSynth 0.1.0, OxiSynth Chorus 0.1.0, and OxiSynth Reverb 0.1.0.

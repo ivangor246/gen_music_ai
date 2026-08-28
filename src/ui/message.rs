@@ -4,7 +4,7 @@
 use std::fmt;
 use std::sync::Arc;
 
-use crate::core::model::midi_model::MidiModel;
+use crate::core::model::backend::GenerativeModel;
 use crate::services::generation::GenerationOutput;
 use crate::services::playback::PlaybackEngine;
 use crate::services::timeline::Timeline;
@@ -35,7 +35,7 @@ pub enum Message {
     ModelDownloadProgress(u64, u64, u64),
     ModelDownloaded(u64, Result<(), String>),
     ModelDownloadCancelled(u64),
-    ModelLoaded(u64, String, Result<Hidden<Arc<MidiModel>>, String>),
+    ModelLoaded(u64, String, Result<Hidden<Arc<GenerativeModel>>, String>),
     RequestModelRemoval,
     CancelModelRemoval,
     ConfirmModelRemoval,

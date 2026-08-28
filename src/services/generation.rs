@@ -13,6 +13,7 @@ use rand_chacha::ChaCha8Rng;
 
 use crate::core::constraints::DecodeFlags;
 use crate::core::midi::gm;
+use crate::core::model::backend::GenerativeModel;
 use crate::core::model::kv_cache::StackCache;
 use crate::core::model::midi_model::MidiModel;
 use crate::core::sampler::{
@@ -76,6 +77,21 @@ pub struct GenerationOutput {
 }
 
 pub fn generate(
+    model: &GenerativeModel,
+    request: &GenerationRequest,
+    cache_dir: &Path,
+    cancel: &AtomicBool,
+    progress: impl FnMut(i64, i64),
+) -> Result<GenerationOutput> {
+    match model {
+        GenerativeModel::Tv2o(model) => generate_tv2o(model, request, cache_dir, cancel, progress),
+        GenerativeModel::MidiGpt(model) => {
+            super::midi_gpt_generation::generate(model, request, cache_dir, cancel, progress)
+        }
+    }
+}
+
+fn generate_tv2o(
     model: &MidiModel,
     request: &GenerationRequest,
     cache_dir: &Path,
@@ -483,6 +499,19 @@ fn next_rows(rows: &[TokenRow], device: &Device) -> Result<Tensor> {
 /// Build the from-scratch prompt: bos, time/key signature, tempo, patch changes.
 /// Returns (rows, disabled channels, lock_instruments).
 fn build_initial_prompt(settings: &GenerationSettings) -> (Vec<TokenRow>, Vec<u16>, bool) {
+    let patches = selected_patches(settings);
+    let rows = setup_rows(settings);
+    let disabled = if patches.is_empty() {
+        Vec::new()
+    } else {
+        (0..16u16)
+            .filter(|c| !patches.iter().any(|(ch, _)| ch == c))
+            .collect()
+    };
+    (rows, disabled, !settings.instruments.is_empty())
+}
+
+pub(crate) fn setup_rows(settings: &GenerationSettings) -> Vec<TokenRow> {
     let mut events: Vec<Event> = Vec::new();
     let (numerator, denominator) = settings.time_signature_parts();
     let denominator_code = match denominator {
@@ -506,6 +535,20 @@ fn build_initial_prompt(settings: &GenerationSettings) -> (Vec<TokenRow>, Vec<u1
     }
     events.push(Event::new(EventType::SetTempo, vec![0, 0, 0, settings.bpm]));
 
+    let patches = selected_patches(settings);
+    for (track, (midi_channel, patch)) in patches.iter().enumerate() {
+        events.push(Event::new(
+            EventType::PatchChange,
+            vec![0, 0, (track + 1) as u16, *midi_channel, *patch],
+        ));
+    }
+
+    let mut rows = vec![bos_row(BOS_ID)];
+    rows.extend(events.iter().filter_map(event_to_tokens));
+    rows
+}
+
+pub(crate) fn selected_patches(settings: &GenerationSettings) -> Vec<(u16, u16)> {
     let mut patches: Vec<(u16, u16)> = Vec::new();
     let mut channel: u16 = 0;
     for instrument in &settings.instruments {
@@ -518,24 +561,7 @@ fn build_initial_prompt(settings: &GenerationSettings) -> (Vec<TokenRow>, Vec<u1
     if drums >= 0 {
         patches.push((9, drums as u16));
     }
-    for (track, (midi_channel, patch)) in patches.iter().enumerate() {
-        events.push(Event::new(
-            EventType::PatchChange,
-            vec![0, 0, (track + 1) as u16, *midi_channel, *patch],
-        ));
-    }
-
-    let mut rows = vec![bos_row(BOS_ID)];
-    rows.extend(events.iter().filter_map(event_to_tokens));
-
-    let disabled = if patches.is_empty() {
-        Vec::new()
-    } else {
-        (0..16u16)
-            .filter(|c| !patches.iter().any(|(ch, _)| ch == c))
-            .collect()
-    };
-    (rows, disabled, !settings.instruments.is_empty())
+    patches
 }
 
 /// Split the context window into (prompt, section): how many events prime a
@@ -555,7 +581,7 @@ fn split_context(requested: u32) -> (u32, u32) {
     (window - section, section)
 }
 
-fn timestamp() -> u128 {
+pub(crate) fn timestamp() -> u128 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos())
