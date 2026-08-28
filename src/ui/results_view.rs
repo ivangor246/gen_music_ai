@@ -192,11 +192,15 @@ fn player_panel(state: &State) -> Element<'_, Message> {
     .align_y(Alignment::Center)
     .spacing(theme::SPACE_SM);
 
-    container(column![visualization, seek, controls].spacing(theme::SPACE_SM))
-        .padding(theme::SPACE_SM)
-        .width(Length::Fill)
-        .style(theme::inset_card)
-        .into()
+    container(
+        column![visualization, seek, controls]
+            .push_maybe(super::view::audio_notice(state))
+            .spacing(theme::SPACE_SM),
+    )
+    .padding(theme::SPACE_SM)
+    .width(Length::Fill)
+    .style(theme::inset_card)
+    .into()
 }
 
 fn maybe_button<'a>(

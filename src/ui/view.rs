@@ -54,6 +54,17 @@ fn section<'a>(title: &'a str, body: Element<'a, Message>) -> Element<'a, Messag
     sized_section(title, body, Length::Shrink)
 }
 
+/// Decoding the SoundFont takes seconds, so every panel that starts audio says
+/// so while it runs: a quiet Play button otherwise reads as a broken one.
+pub(super) fn audio_notice(state: &State) -> Option<Element<'_, Message>> {
+    state.player_loading.then(|| {
+        text("Preparing audio…")
+            .size(12)
+            .style(iced::widget::text::secondary)
+            .into()
+    })
+}
+
 fn sized_section<'a>(
     title: &'a str,
     body: Element<'a, Message>,

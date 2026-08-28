@@ -38,6 +38,7 @@ pub fn view(state: &State) -> Element<'_, Message> {
             .spacing(theme::SPACE_SM),
         scrollable(instrument_list(state, selected_count)).height(Length::Fixed(240.0)),
     ]
+    .push_maybe(super::view::audio_notice(state))
     .spacing(theme::SPACE_SM)
     .width(Length::Fill)
     .into()

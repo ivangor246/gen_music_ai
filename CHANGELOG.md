@@ -12,7 +12,16 @@ All notable changes to this project are documented in this file. The format is b
   explicit loading, cancellation, retry, and confirmed local removal.
 - Per-instrument audio previews in the searchable General MIDI selection list: a short rolled
   chord auditioning the patch, playable and stoppable per row.
+- A "Preparing audio…" notice in the instrument list and the player panel while the SoundFont is
+  being decoded, so a silent Play button is never mistaken for a broken one.
 - Lightweight Linux, Windows, and macOS CI coverage for the external model workflow.
+
+### Fixed
+
+- Buffer under- and overruns during playback: the synth now runs at the output device's own sample
+  rate instead of resampling to a fixed 44.1 kHz, and the stream asks for roughly 40 ms of buffer
+  (falling back to the driver default when a fixed period is refused). Repeated stream errors are
+  reported once rather than flooding the console.
 
 ### Changed
 
